@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "BodyParts" ADD COLUMN     "baseId" INTEGER,
+ADD COLUMN     "withOnly" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "withOutWith" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "withOut" BOOLEAN NOT NULL DEFAULT false;

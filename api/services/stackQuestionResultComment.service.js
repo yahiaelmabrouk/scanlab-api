@@ -1,0 +1,178 @@
+const { sequelize, Sequelize } = require('../../db/models')
+const { Op } = Sequelize
+const _ = require('lodash')
+const ModelProvider = require('../providers/model.provider')
+const statsCacheHelper = require('../statsCacheHelper')
+const { notifyUser } = require('./notification.service')
+const { feedbackReceivedTemplate } = require('../../util/emailTemplates')
+const logger = require('../../util/logger')
+
+const viewComment = async (loggedInUserId, testRunUserId, data) => {
+  const modelProvider = await ModelProvider.getModelProvider(testRunUserId)
+  const { stackQuestionResultId, studentId } = data
+  const stackQuestionResultCommentSql = `
+  SELECT
+    sqrc.*,
+    json_build_object('id', cu."id", 'legalName', COALESCE (cuui."legalName", cuuei."legalName", 'N/A')) AS "commentedUser",
+    json_build_object('id', vu."id", 'legalName', COALESCE (vuui."legalName", vuuei."legalName", 'N/A')) AS "viewedUser"
+  FROM "${modelProvider.StackQuestionResultComment._schema || 'public'}"."${
+    modelProvider.StackQuestionResultComment.tableName
+  }" sqrc
+  LEFT JOIN "Users" cu
+    ON sqrc."commentedUserId" = cu."id"
+  LEFT JOIN "Users" vu
+    ON sqrc."viewedUserId" = vu."id"
+  LEFT JOIN "public"."UserInformations" cuui
+    ON cuui."userId" = "cu"."id"
+  LEFT JOIN "eu_west_server_public"."UserInformations" cuuei
+    ON cuuei."userId" = "cu"."id"
+  LEFT JOIN "public"."UserInformations" vuui
+    ON vuui."userId" = "vu"."id"
+  LEFT JOIN "eu_west_server_public"."UserInformations" vuuei
+    ON vuuei."userId" = "vu"."id"
+  WHERE sqrc."stackQuestionResultId" = :stackQuestionResultId
+  `
+  const stackQuestionResultComments = await sequelize.query(stackQuestionResultCommentSql, {
+    type: sequelize.QueryTypes.SELECT,
+    replacements: { stackQuestionResultId },
+  })
+
+  if (!stackQuestionResultComments) {
+    throw { status: 400, message: 'StackQuestionResultComment not found' }
+  }
+
+  const allAdminComments = stackQuestionResultComments.filter((comment) => comment.commentedUserId !== studentId)
+  const allStudentComments = stackQuestionResultComments.filter((comment) => comment.commentedUserId === studentId)
+  const isStudentView = studentId == loggedInUserId
+
+  const unseenAdminCommentIds = allAdminComments.filter((c) => !c.seen).map((c) => c.id)
+  const unseenStudentCommentIds = allStudentComments.filter((c) => !c.seen).map((c) => c.id)
+
+  await sequelize.transaction(async (transaction) => {
+    const unseenIds = isStudentView ? unseenAdminCommentIds : unseenStudentCommentIds
+    if (unseenIds.length > 0) {
+      await modelProvider.StackQuestionResultComment.update(
+        { seen: true, seenAt: new Date(), viewedUserId: loggedInUserId },
+        { where: { id: { [Op.in]: unseenIds } }, transaction }
+      )
+    }
+  })
+
+  // Refresh cache asynchronously after marking comments as seen
+  setImmediate(async () => {
+    try {
+      await statsCacheHelper.refreshCachesAfterCommentChange(testRunUserId)
+    } catch (err) {
+      console.log('refreshCachesAfterCommentChange failed in viewComment', err)
+    }
+  })
+
+  return stackQuestionResultComments
+}
+
+const createComment = async (loggedInUserId, testRunUserId, data) => {
+  const modelProvider = await ModelProvider.getModelProvider(testRunUserId)
+  const { stackQuestionResultId, comment } = data
+  const stackQuestionResult = await modelProvider.StackQuestionResult.findByPk(stackQuestionResultId)
+  if (!stackQuestionResult) {
+    throw { status: 400, message: 'StackQuestionResult not found' }
+  }
+  const stackQuestionResultComment = await modelProvider.StackQuestionResultComment.create({
+    stackQuestionResultId,
+    comment,
+    seen: false,
+    createdAt: new Date(),
+    commentedUserId: loggedInUserId,
+    lastedUpdatedAt: new Date(),
+  })
+  if (!stackQuestionResultComment) {
+    throw { status: 400, message: 'StackQuestionResultComment not created' }
+  }
+
+  const studentUserId = parseInt(testRunUserId, 10)
+  const commenterUserId = parseInt(loggedInUserId, 10)
+
+  // Notify student when an instructor (someone other than the student) leaves feedback
+  if (commenterUserId !== studentUserId) {
+    setImmediate(() => {
+      const base = process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
+      const deepLink = `${base}/test-runs/${testRunUserId}`
+      const { subject, html } = feedbackReceivedTemplate('your scan submission', deepLink)
+      notifyUser(studentUserId, 'FEEDBACK_RECEIVED', {
+        title: 'Feedback received',
+        message: 'Your instructor has left feedback on your scan submission.',
+        deepLink,
+        emailSubject: subject,
+        emailHtml: html,
+      }).catch((err) => logger.error(`[FEEDBACK_RECEIVED] notify failed for user ${studentUserId}: ${err.message}`))
+    })
+  }
+
+  // Refresh cache asynchronously after creating comment
+  setImmediate(async () => {
+    try {
+      await statsCacheHelper.refreshCachesAfterCommentChange(testRunUserId)
+    } catch (err) {
+      console.log('refreshCachesAfterCommentChange failed in createComment', err)
+    }
+  })
+
+  return stackQuestionResultComment
+}
+
+const updateComment = async (id, loggedInUserId, testRunUserId, data) => {
+  const modelProvider = await ModelProvider.getModelProvider(testRunUserId)
+  const { comment } = data
+  const stackQuestionResultComment = await modelProvider.StackQuestionResultComment.findByPk(id)
+  if (!stackQuestionResultComment) {
+    throw { status: 400, message: 'StackQuestionResultComment not found' }
+  }
+  if (stackQuestionResultComment.commentedUserId !== loggedInUserId) {
+    throw { status: 403, message: 'You are not allowed to update this comment' }
+  }
+  _.extend(stackQuestionResultComment, {
+    comment,
+    seen: false,
+    commentedUserId: loggedInUserId,
+    lastedUpdatedAt: new Date(),
+  })
+  await stackQuestionResultComment.save()
+
+  const studentUserId = parseInt(testRunUserId, 10)
+  const commenterUserId = parseInt(loggedInUserId, 10)
+
+  // Re-notify student when instructor edits their feedback
+  if (commenterUserId !== studentUserId) {
+    setImmediate(() => {
+      const base = process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
+      const deepLink = `${base}/test-runs/${testRunUserId}`
+      const { subject, html } = feedbackReceivedTemplate('your scan submission', deepLink)
+      notifyUser(studentUserId, 'FEEDBACK_RECEIVED', {
+        title: 'Feedback updated',
+        message: 'Your instructor has updated their feedback on your scan submission.',
+        deepLink,
+        emailSubject: subject,
+        emailHtml: html,
+      }).catch((err) => logger.error(`[FEEDBACK_RECEIVED] update-notify failed for user ${studentUserId}: ${err.message}`))
+    })
+  }
+
+  // Refresh cache asynchronously after updating comment
+  setImmediate(async () => {
+    try {
+      await statsCacheHelper.refreshCachesAfterCommentChange(testRunUserId)
+    } catch (err) {
+      console.log('refreshCachesAfterCommentChange failed in updateComment', err)
+    }
+  })
+
+  return stackQuestionResultComment
+}
+
+const stackQuestionResultCommentService = {
+  viewComment,
+  createComment,
+  updateComment,
+}
+
+module.exports = stackQuestionResultCommentService

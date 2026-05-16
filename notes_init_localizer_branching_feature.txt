@@ -1,0 +1,35 @@
+Met with Matthew about this CT Localizer Branching again; have a better understanding now:
+
+Currently:
+Dicom branching is based on the filenames https://github.com/scanlabmr/scanlab-web/pull/569
+Admins can choose a branch per Question - from a single list of branching, as discovered by HD/HD filenames
+Branching is applied to both HD (normal scans) and LD (MRI "Add Localizer") scans/reformats
+Branching is not used by/for Initial Localizers
+Each Initial Localizer is a single images
+All initial localizers are potentially shown at once (I think it tried to find the right direction of localizer per SliceView, and will potentially show 3 different initial localizers (one per SliceView) if there are 3 different direction of them) - a Localizer Set - there can be only one Initial Localizer Set (not a concept)
+
+Requested Feature:
+In CT, we want the initial localizers to support Branching, also
+There should be multiple Initial Localizer Sets. They should support branching, that should be pickable on the CT question type "Localizer Question"
+The list of branches for Localizers should be separate from the current Dicom Branches for HD/LD files. So another list of Initial Localizer Set branches that's discovered from file names.
+Admin should be able to pick one ILS branch for a Localizer Question, which then has only that Set of Initial Localizers show up (slow reveal) during that CT question (could still be multiple Initial Localizers just like now, but only from that specific branch)
+May need a way to (or manually) rename already uploaded Initial Localizers
+
+----
+
+StackQuestions db has the branch columns
+    we can just store the Initial Localizer branch on a Localizer Question, too - even if it doesn't seem like we do/will ever have more than one of those per QuestionSet
+      ... one step closer to supporting that if we ever do want that
+
+
+> Plan
+.- find code where we pick what is the Initial Localizer ... make it be more picky when there is an IL_Branch set on the first StackQuestion of the QuestionSet
+    (Maybe serialize it onto the QuestionSet, too?... see if we have easy access to that data where we need it)
+- Allow limiting the Initial Localizers StackConfigs per StackQuestion
+    StackQuestion.filterInitialLocalizerStackConfigIdents = [] // if null/empty, don't filter them; but if at least one string, do filter them (make the StackConfigs all have hidden: true
+- Use the rename ident of StackConfigs ... OR: new initialLocalizerIdent
+    - initial localizers are just one frame... so they should have come from one url - eh, may not be the case with nii files... might be hard since we load them all at once.
+- so basically allow checkbox for each Initial Localizer StackConfig for a CT LOC StackQuestion; (Should work on any Question, but just show on this one... or if it's set somehow?)
+- then by merely filtering out the Localizers we don't want (via setting Hidden on them... or augment data elsewhere), the SliceView logic of defaulting to a reasonable StackConfig should do the rest
+
+curQuestionInitialLocalizerWhitelist

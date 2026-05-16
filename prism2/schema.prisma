@@ -1,0 +1,1056 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_PRIMARY")
+}
+
+model ResourceCategory {
+  id        Int        @id @default(autoincrement())
+  createdAt DateTime?  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime?  @updatedAt @db.Timestamptz(6)
+  name      String     @default("")
+  resources Resource[]
+
+  @@map("ResourceCategories")
+}
+
+model Resource {
+  id               Int               @id @default(autoincrement())
+  createdAt        DateTime?         @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime?         @updatedAt @db.Timestamptz(6)
+  title            String
+  description      String?           @default("")
+  url              String?           @default("{}")
+  path             String?           @default("{}")
+  language         String            @default("en")
+  categoryId       Int?
+  resourceCategory ResourceCategory? @relation(fields: [categoryId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  type             Int               @default(1)
+  sortOrder        Int               @default(0)
+
+  @@map("Resources")
+}
+
+model Language {
+  id        Int       @id @default(autoincrement())
+  createdAt DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime? @updatedAt @db.Timestamptz(6)
+  code      String
+  name      String?   @default("")
+  content   Json      @default("{}")
+  flag      String?   @default("")
+
+  @@map("Languages")
+}
+
+model PatientPhysioCardiacLevel {
+  id                    Int            @id @default(autoincrement())
+  createdAt             DateTime?      @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime?      @updatedAt @db.Timestamptz(6)
+  levelType             Int            @default(1)
+  cardiacCycleDuration  Int            @default(300)
+  cardiacCycleDeviation Int            @default(0)
+  badBeats              Int            @default(1)
+  badBeatsDuration      Json?          @default("{\"isRange\":false,\"min\":400,\"max\":400}")
+  continuousECGData     Json?          @default("{\"data\":[],\"waveWidth\":0,\"distanceFromTwoWave\":0,\"centerRToCenterT\":0,\"startPToCenterR\":0,\"centerTToEnd\":0, \"distanceFromSToT\":0, \"distanceFromPToQ\":0}")
+  patientPhysio         PatientPhysio? @relation(fields: [patientPhysioId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  patientPhysioId       Int?
+
+  @@map("PatientPhysioCardiacLevels")
+}
+
+model PatientPhysio {
+  id                       Int                         @id @default(autoincrement())
+  createdAt                DateTime?                   @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime?                   @updatedAt @db.Timestamptz(6)
+  name                     String
+  strokeVol                Int                         @default(40)
+  age                      Int                         @default(20)
+  respiratoryCycleDuration Int                         @default(500)
+  breathHoldDuration       Int                         @default(0)
+  unit                     Int                         @default(1)
+  difficulty               Int                         @default(1)
+  cardiacLevels            PatientPhysioCardiacLevel[]
+  preparedExams            PreparedExam[]
+
+  @@map("PatientPhysios")
+}
+
+model ContrastRangePreset {
+  id         Int       @id @default(autoincrement())
+  createdAt  DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime? @updatedAt @db.Timestamptz(6)
+  weighting  String?
+  magPrep    String?
+  sequence   String?
+  bodyPart   BodyPart? @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bodyPartId Int?
+  ranges     Json
+
+  @@index([bodyPartId], map: "contrast_range_preset_body_part")
+  @@map("ContrastRangePresets")
+}
+
+model InjectionAttribute {
+  id                  Int       @id @default(autoincrement())
+  bodyPartId          Int?
+  createdAt           DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime? @updatedAt @db.Timestamptz(6)
+  contrastMinDose     Float?    @default(0)
+  contrastMaxDose     Float?    @default(0)
+  contrastMinFlowRate Float?    @default(0)
+  contrastMaxFlowRate Float?    @default(0)
+  salineMinDose       Float?    @default(0)
+  salineMaxDose       Float?    @default(0)
+  salineMinFlowRate   Float?    @default(0)
+  salineMaxFlowRate   Float?    @default(0)
+  minTime             Int?      @default(0)
+  posts               Json      @default("[]") @db.Json
+  maxTime             Int?      @default(0)
+  bodyPart            BodyPart? @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([bodyPartId], map: "injection_attribute_body_part")
+  @@map("InjectionAttributes")
+}
+
+model Model {
+  id             Int       @id @default(autoincrement())
+  name           String
+  fileName       String
+  gender         String    @default("female")
+  age            Int?      @default(0)
+  to             Int?      @default(100)
+  weightImperial Float?    @default(0) @db.DoublePrecision
+  weightMetric   Float?    @default(0) @db.DoublePrecision
+  heightImperial Float?    @default(0) @db.DoublePrecision
+  heightMetric   Float?    @default(0) @db.DoublePrecision
+  heightInches   Float?    @default(0) @db.DoublePrecision
+  attributes     Json      @default("[]") @db.Json
+  createdAt      DateTime? @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime? @updatedAt @db.Timestamptz(6)
+  bodyBoxes      BodyBox[]
+
+  @@map("Models")
+}
+
+model BodyBox {
+  id                        Int             @id @default(autoincrement())
+  x                         Float           @db.DoublePrecision
+  y                         Float           @db.DoublePrecision
+  z                         Float           @db.DoublePrecision
+  width                     Float           @db.DoublePrecision
+  height                    Float           @default(20) @db.DoublePrecision
+  length                    Float           @db.DoublePrecision
+  landmarkTolerance         Float           @default(1) @db.DoublePrecision
+  landmarkToleranceBottom   Float           @default(1) @db.DoublePrecision
+  landmarkToleranceVertical Float           @default(1) @db.DoublePrecision
+  createdAt                 DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime        @updatedAt @db.Timestamptz(6)
+  bodyBoxDirection          Int             @default(1)
+  mriUpDownPositionY        Float           @default(0) @db.DoublePrecision
+  bodyPartId                Int
+  patientPositionId         Int
+  modelId                   Int?
+  patientPosition           PatientPosition @relation(fields: [patientPositionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  model                     Model?          @relation(fields: [modelId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("BodyBoxes")
+}
+
+model PatientPosition {
+  id                 Int                 @id @default(autoincrement())
+  value              Json                @db.Json
+  isShowHeadHolder   Boolean             @default(false)
+  createdAt          DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(6)
+  bodyPartId         Int
+  BodyPart           BodyPart?           @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  positionSetId      Int?
+  patientPositionSet PatientPositionSet? @relation(fields: [positionSetId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  bodyBoxes          BodyBox[]
+
+  @@index([bodyPartId], map: "patient_position_body_part_id")
+  @@map("PatientPositions")
+}
+
+model PatientPositionSet {
+  id               Int               @id @default(autoincrement())
+  name             String            @db.VarChar(255)
+  createdAt        DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime          @updatedAt @db.Timestamptz(6)
+  patientPositions PatientPosition[]
+  stackQuestions   StackQuestion[]
+  bodyPartId       Int?
+  bodyPart         BodyPart?         @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("PatientPositionSets")
+}
+
+model BodyPart {
+  id                      Int                      @id @default(autoincrement())
+  name                    String                   @db.VarChar(255)
+  createdAt               DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime                 @updatedAt @db.Timestamptz(6)
+  withOut                 Boolean                  @default(false)
+  withOnly                Boolean                  @default(false)
+  withOutWith             Boolean                  @default(false)
+  baseId                  Int?
+  regionId                Int
+  contrastTypes           Json                     @default("{}") @db.Json
+  Base                    BodyPart?                @relation("BodyPartAndBases", fields: [baseId], references: [id])
+  Extends                 BodyPart[]               @relation("BodyPartAndBases")
+  Region                  Region                   @relation(fields: [regionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  DigitalLocalizers       DigitalLocalizer[]
+  DicomFileSets           DicomFileSet[]
+  MultipleChoiceQuestions MultipleChoiceQuestion[]
+  QuestionSets            QuestionSet[]
+  PatientPositions        PatientPosition[]
+  injectionAttributes     InjectionAttribute[]
+  ContrastRangePresets    ContrastRangePreset[]
+  PatientPositionSets     PatientPositionSet[]
+  QuestionProbes          QuestionProbe[]
+
+  @@index([regionId], map: "body_parts_region_id")
+  @@map("BodyParts")
+}
+
+model Category {
+  id                      Int                      @id @default(autoincrement())
+  name                    String?                  @db.VarChar(255)
+  createdAt               DateTime                 @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime                 @updatedAt @db.Timestamptz(6)
+  MultipleChoiceQuestions MultipleChoiceQuestion[]
+  InterventionRules       InterventionRule[]
+
+  @@map("Categories")
+}
+
+model CohortManager {
+  id        Int      @id @default(autoincrement())
+  cohortId  Int
+  userId    Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  Cohort    Cohort   @relation(fields: [cohortId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  User      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([cohortId, userId])
+  @@map("CohortManagers")
+}
+
+model CohortPreparedExam {
+  id        Int      @id @default(autoincrement())
+  cohortId  Int
+  examId    Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  Cohort    Cohort   @relation(fields: [cohortId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("CohortPreparedExams")
+}
+
+model CohortStudent {
+  id                  Int               @id @default(autoincrement())
+  userId              Int?
+  cohortId            Int
+  registrationCodeId  Int?
+  createdAt           DateTime          @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime          @updatedAt @db.Timestamptz(6)
+  settingsFromManager Json              @default("{}") @db.Json
+  Cohort              Cohort            @relation(fields: [cohortId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  RegistrationCode    RegistrationCode? @relation(fields: [registrationCodeId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  User                User?             @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([cohortId], map: "cohort_students_cohort_id")
+  @@index([userId], map: "cohort_students_user_id")
+  @@index([cohortId, userId], map: "cohort_students_cohort_id_user_id")
+  @@map("CohortStudents")
+}
+
+model Cohort {
+  id                              Int                  @id @default(autoincrement())
+  name                            String               @db.VarChar(255)
+  createdAt                       DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt                       DateTime             @updatedAt @db.Timestamptz(6)
+  availableRegistrationCodesCount Int                  @default(0)
+  studentsCount                   Int                  @default(0)
+  settings                        Json                 @default("{}")
+  adminSettings                   Json                 @default("{ \"isActive\": true, \"isPlaygroundEnabled\": false, \"isRandomModeEnabled\": false, \"isChallengeModeEnabled\": false, \"isTestByRegionEnabled\": true, \"amountOfCriticalThinkingQuestionsPerTestRun\": 4 }")
+  expirationLength                String?              @default("365") @db.VarChar(255)
+  area                            String?              @default("us_east")
+  CohortManagers                  CohortManager[]
+  CohortStudents                  CohortStudent[]
+  RegistrationCodes               RegistrationCode[]
+  CohortPreparedExams             CohortPreparedExam[]
+  ApiKeys                         ApiKey[]
+  endpointPermissions             CohortEndpointPermission[]
+
+  @@map("Cohorts")
+}
+
+model CohortAverageCache {
+  id                  Int       @id @default(autoincrement())
+  cohortId            Int       @unique
+  angleAverage          Float?
+  wastedSlicesAverage   Float?
+  wastedCoverageAverage Float?
+  lastUpdatedAt         DateTime  @default(now())
+  lastUsed              DateTime?
+
+  @@map("CohortAverageCache")
+}
+
+model UserStatsCache {
+  id                   Int       @id @default(autoincrement())
+  userId               Int
+  cacheType            String
+  includeChallengeMode Boolean   @default(false)
+
+  // this will hold the full precomputed payload for that user
+  // (array of rows for /statistics or /statistics/tests/whom)
+  data                 Json      @db.JsonB
+
+  lastUpdatedAt        DateTime  @default(now())
+  lastUsed             DateTime?
+
+  @@unique([userId, cacheType, includeChallengeMode])
+  @@index([lastUsed])
+
+  @@map("UserStatsCaches")
+}
+
+model DicomFileSet {
+  id                        Int                        @id @default(autoincrement())
+  name                      String?                    @db.VarChar(255)
+  createdAt                 DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime                   @updatedAt @db.Timestamptz(6)
+  regionId                  Int?
+  flipAxial                 Boolean?                   @default(false)
+  flipCoronal               Boolean?                   @default(false)
+  flipSagittal              Boolean?                   @default(false)
+  isUltraLab                Boolean?                   @default(false)
+  type                      String?                    @db.VarChar(255)
+  linkedDicoms              Json?                      @db.Json
+  userViewOnlyAllowed       Boolean                    @default(false)
+  bodyPartId                Int?
+  localizerBoundingBoxes    Json?                      @default("[]")
+  scanBoundingBoxes         Json?                      @default("[]")
+  dicomCategory             Int                        @default(0)
+  localizerNames            Json?                      @default("{}")
+  availablePositions        Json?                      
+  BodyPart                  BodyPart?                  @relation(fields: [bodyPartId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  Region                    Region?                    @relation(fields: [regionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  JoinUploadToDicomFileSets JoinUploadToDicomFileSet[]
+  QuestionMediaDicoms       QuestionMediaDicom[]
+  QuestionSets              QuestionSet[]
+
+  @@map("DicomFileSets")
+}
+
+model JoinUploadToDicomFileSet {
+  createdAt      DateTime     @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime     @updatedAt @db.Timestamptz(6)
+  uploadId       Int
+  dicomFileSetId Int
+  DicomFileSet   DicomFileSet @relation(fields: [dicomFileSetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  Upload         Upload       @relation(fields: [uploadId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@id([uploadId, dicomFileSetId])
+}
+
+model MultipleChoiceQuestionResult {
+  id                       Int                    @id @default(autoincrement())
+  answer                   String?
+  createdAt                DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @db.Timestamptz(6)
+  userId                   Int
+  multipleChoiceQuestionId Int
+  testRunId                Int?
+  score                    Decimal                @db.Decimal(5, 2)
+  MultipleChoiceQuestion   MultipleChoiceQuestion @relation(fields: [multipleChoiceQuestionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  TestRun                  TestRun?               @relation(fields: [testRunId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  User                     User                   @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("MultipleChoiceQuestionResults")
+}
+
+model MultipleChoiceQuestion {
+  id                            Int                            @id @default(autoincrement())
+  questionText                  String?
+  choices                       Json?                          @db.Json
+  answerExplanation             String?
+  createdAt                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @db.Timestamptz(6)
+  categoryId                    Int
+  bodyPartId                    Int?
+  difficulty                    Int?
+  type                          String                         @default("MC") @db.VarChar(255)
+  range                         Json?                          @db.Json
+  onlyForPreparedExams          Boolean                        @default(false)
+  globalQuestion                Boolean                        @default(false)
+  secondsToAnswer               Int                            @default(45)
+  screeningForm                 Json                           @default("{}")
+  hideQuestion                  Boolean                        @default(false)
+  isGeneralQuestion             Boolean?                       @default(false)
+  keepOrder                     Boolean?                       @default(false)
+  isBetaQuestion                Boolean                        @default(false)
+  betaQuestionAttempts          Int                            @default(0)
+  BodyPart                      BodyPart?                      @relation(fields: [bodyPartId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  Category                      Category                       @relation(fields: [categoryId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  MultipleChoiceQuestionResults MultipleChoiceQuestionResult[]
+  QuestionMedias                QuestionMedia[]
+  QuestionMiscDocuments         QuestionMiscDocument[]
+
+  @@map("MultipleChoiceQuestions")
+}
+
+model PreparedExam {
+  id                        Int            @id @default(autoincrement())
+  questions                 Json           @default("{ \"preTestQuestions\": [], \"questionSetId\": null, \"postTestQuestions\": [] }") @db.Json
+  title                     String         @default("New Prepared Exam")
+  published                 Boolean        @default(false)
+  createdAt                 DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime       @updatedAt @db.Timestamptz(6)
+  isSkill                   Boolean        @default(true)
+  isHiring                  Boolean        @default(false)
+  isDynamic                 Boolean        @default(false)
+  regionId                  Int?
+  bodyPartId                Int?
+  postQuestionCount         Int?
+  postQuestionBodyPartCount Int?
+  postQuestionGroupId       Int?
+  preQuestionGroupId        Int?
+  patientPhysioId           Int?
+  postQuestionGroup         QuestionGroup? @relation("PostQuestionGroup", fields: [postQuestionGroupId], references: [id])
+  preQuestionGroup          QuestionGroup? @relation("PreQuestionGroup", fields: [preQuestionGroupId], references: [id])
+  patientPhysio             PatientPhysio? @relation(fields: [patientPhysioId], references: [id])
+
+  @@map("PreparedExams")
+}
+
+model QuestionMedia {
+  id                       Int                     @id @default(autoincrement())
+  multipleChoiceQuestionId Int?
+  createdAt                DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime                @updatedAt @db.Timestamptz(6)
+  MultipleChoiceQuestion   MultipleChoiceQuestion? @relation(fields: [multipleChoiceQuestionId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  QuestionMediaDicoms      QuestionMediaDicom[]
+  QuestionMediaUploads     QuestionMediaUpload[]
+}
+
+model QuestionMediaDicom {
+  id              Int            @id @default(autoincrement())
+  questionMediaId Int?
+  dicomFileSetId  Int?
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+  DicomFileSet    DicomFileSet?  @relation(fields: [dicomFileSetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  QuestionMedia   QuestionMedia? @relation(fields: [questionMediaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("QuestionMediaDicoms")
+}
+
+model QuestionMediaUpload {
+  id              Int            @id @default(autoincrement())
+  alt             String?        @db.VarChar(255)
+  pathKey         String?        @db.VarChar(255)
+  filename        String?        @db.VarChar(255)
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+  type            String?        @db.VarChar(255)
+  dimensions      Json?          @db.Json
+  questionMediaId Int?
+  QuestionMedia   QuestionMedia? @relation(fields: [questionMediaId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("QuestionMediaUploads")
+}
+
+model QuestionMiscDocument {
+  id                       Int                     @id @default(autoincrement())
+  alt                      String?                 @db.VarChar(255)
+  pathKey                  String?                 @db.VarChar(255)
+  filename                 String?                 @db.VarChar(255)
+  type                     String?                 @db.VarChar(255)
+  multipleChoiceQuestionId Int?
+  createdAt                DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime                @updatedAt @db.Timestamptz(6)
+  MultipleChoiceQuestion   MultipleChoiceQuestion? @relation(fields: [multipleChoiceQuestionId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("QuestionMiscDocuments")
+}
+
+model QuestionSetResult {
+  id                   Int                   @id @default(autoincrement())
+  score                Decimal?              @db.Decimal(5, 2)
+  sliceQuantScore      Decimal?              @db.Decimal(5, 2)
+  overallSkillScores   Json?                 @db.Json
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
+  isViewedAdminComment Boolean?              @default(true)
+  isViewedUserReply    Boolean?              @default(true)
+  isViewedAdminReply   Boolean?              @default(true)
+  userId               Int
+  questionSetId        Int?
+  testRunId            Int?
+  isChallengeMode      Boolean?
+  QuestionSet          QuestionSet?          @relation(fields: [questionSetId], references: [id], onDelete: Cascade)
+  TestRun              TestRun?              @relation(fields: [testRunId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  User                 User                  @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  StackQuestionResults StackQuestionResult[]
+
+  @@index([userId], map: "question_set_results_user_id")
+  @@index([testRunId], map: "question_set_results_test_run_id")
+  @@index([questionSetId], map: "question_set_results_question_set_id")
+  @@map("QuestionSetResults")
+}
+
+model QuestionSet {
+  id                 Int                 @id @default(autoincrement())
+  name               String?             @db.VarChar(255)
+  dicomFileSet       Int
+  createdAt          DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime            @updatedAt @db.Timestamptz(6)
+  bodyPartId         Int?
+  isAvailable        Boolean             @default(true)
+  isPreparedExamOnly Boolean             @default(false)
+  isUltraLab         Boolean             @default(false)
+  rarity             String?             @default("common") @db.VarChar(255)
+  ageFrom            Int?
+  ageTo              Int?
+  gender             String?
+  BodyPart           BodyPart?           @relation(fields: [bodyPartId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  DicomFileSets      DicomFileSet        @relation(fields: [dicomFileSet], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  QuestionSetResults QuestionSetResult[]
+  StackQuestions     StackQuestion[]
+
+  @@index([bodyPartId], map: "question_sets_body_part_id")
+  @@map("QuestionSets")
+}
+
+model QuestionProbe {
+  id                           Int                 @id @default(autoincrement())
+  bodyPartId                   Int                 @default(1)
+  scanDirection                Int                 @default(1)
+  visibleProbes                Json                @default("[]")
+  createdAt                    DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt                    DateTime            @updatedAt @db.Timestamptz(6)
+  BodyPart                     BodyPart?           @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@map("QuestionProbes")
+}
+
+model Region {
+  id              Int            @id @default(autoincrement())
+  name            String         @db.VarChar(255)
+  createdAt       DateTime       @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime       @updatedAt @db.Timestamptz(6)
+  anatomicalOrder Int?           @unique
+  BodyParts       BodyPart[]
+  DicomFileSets   DicomFileSet[]
+
+  @@map("Regions")
+}
+
+model RegistrationCode {
+  id              Int                     @id @default(autoincrement())
+  code            String                  @unique @db.VarChar(255)
+  used            Boolean?                @default(false)
+  cohortId        Int
+  createdAt       DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime                @updatedAt @db.Timestamptz(6)
+  notes           String?
+  expirationDate  DateTime?               @db.Timestamptz(6)
+  status          RegistrationCodesStatus @default(active)
+  activationDate  DateTime?               @db.Timestamptz(6)
+  numOfDaysActive Int                     @default(365)
+  userId          Int?
+  Cohort          Cohort                  @relation(fields: [cohortId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  CohortStudents  CohortStudent[]
+  User            User?                   @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("RegistrationCodes")
+}
+
+model Role {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(255)
+  userId    Int
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  User      User     @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@unique([name, userId], map: "roles_name_user_id")
+  @@map("Roles")
+}
+
+model StackQuestionResult {
+  id                         Int                          @id @default(autoincrement())
+  score                      Decimal?                     @db.Decimal(5, 2)
+  attemptedAnswerIdentifier  String?                      @db.VarChar(255)
+  createdAt                  DateTime                     @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime                     @updatedAt @db.Timestamptz(6)
+  answer                     Json?                        @db.Json
+  comment                    String?                      @default("")
+  commentCreatedAt           DateTime?                    @default(now()) @db.Timestamptz(6)
+  commentedUserId            Int?
+  commentSeenAt              DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedAdminComment       Boolean?                     @default(true)
+  reply                      String?                      @default("")
+  replyCreatedAt             DateTime?                    @default(now()) @db.Timestamptz(6)
+  replySeenAt                DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedUserReply          Boolean?                     @default(true)
+  adminReply                 String?                      @default("")
+  adminReplyCreatedAt        DateTime?                    @default(now()) @db.Timestamptz(6)
+  adminRepliedUserId         Int?
+  adminReplySeenAt           DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedAdminReply         Boolean?                     @default(true)
+  questionSetResultId        Int?
+  stackQuestionId            Int?
+  skillScores                Json?
+  groupScoreVariables        Json?
+  sliceQuantScores           Json?
+  sliceViews                 Json?
+  answerViews                Json?
+  skipped                    Boolean?
+  freebie                    Boolean?
+  User                       User?                        @relation(fields: [commentedUserId], references: [id], onDelete: NoAction)
+  QuestionSetResult          QuestionSetResult?           @relation(fields: [questionSetResultId], references: [id], onDelete: Cascade)
+  StackQuestion              StackQuestion?               @relation(fields: [stackQuestionId], references: [id], onDelete: Cascade)
+  StackQuestionResultComment StackQuestionResultComment[]
+
+  @@index([questionSetResultId], map: "stack_question_results_qsr_id")
+  @@index([stackQuestionId], map: "stack_question_results_sq_id")
+  @@map("StackQuestionResults")
+}
+
+model StackQuestionResultComment {
+  id                    Int                 @id @default(autoincrement())
+  comment               String?             @default("")
+  seen                  Boolean?            @default(true)
+  seenAt                DateTime?           @default(now()) @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  lastedUpdatedAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @db.Timestamptz(6)
+  commentedUserId       Int?
+  viewedUserId          Int?
+  stackQuestionResultId Int
+  ViewedUser            User?               @relation("ViewedUser", fields: [viewedUserId], references: [id], onDelete: SetNull)
+  CommentedUser         User?               @relation("CommentedUser", fields: [commentedUserId], references: [id], onDelete: Cascade)
+  StackQuestionResult   StackQuestionResult @relation(fields: [stackQuestionResultId], references: [id], onDelete: Cascade)
+
+  @@index([stackQuestionResultId], map: "sqr_comments_sqr_id")
+  @@map("StackQuestionResultComments")
+}
+
+model StackQuestion {
+  id                        Int                   @id @default(autoincrement())
+  questionText              String?
+  hdBranchId                String?
+  ldBranchId                String?
+  answers                   Json?                 @db.Json
+  createdAt                 DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime              @updatedAt @db.Timestamptz(6)
+  questionSet               Int
+  questionType              Int?
+  phaseNum                  Int                   @default(1)
+  postContrast              Boolean?              @default(false)
+  title                     String?               @default("")
+  hideSetDelay              Boolean?              @default(false)
+  order                     Int?
+  difficulty                Int?
+  initialSelection          Json?                 @db.Json
+  ignoreInPlaneRotation     Boolean?              @default(false)
+  freebie                   Boolean?
+  alterVolumeView           Boolean?
+  alterSpacingThickness     Boolean?
+  gradeContats              Boolean?
+  dontGradeEfficiency       Boolean?
+  dontGradePixelShift       Boolean?
+  hasSpecialtyOptions       Boolean?              @default(false)
+  contrastRangePresetId     Int?
+  initialLocalizerWhitelist Json?                 @default("[]")
+  displayVariants           Json?                 @default("[]")
+  displayVariantSelectionId String?
+  QuestionSet               QuestionSet           @relation(fields: [questionSet], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  StackQuestionResults      StackQuestionResult[]
+  positionSetId             Int?
+  patientPositionSet        PatientPositionSet?   @relation(fields: [positionSetId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@index([questionSet], map: "stack_questions_question_set")
+  @@map("StackQuestions")
+}
+
+model TestRun {
+  id                            Int                            @id @default(autoincrement())
+  userId                        Int?
+  questions                     Json?                          @db.Json
+  answers                       Json?                          @db.Json
+  secondsActive                 Int?
+  timeStarted                   DateTime?                      @db.Timestamptz(6)
+  timeEnded                     DateTime?                      @db.Timestamptz(6)
+  createdAt                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @db.Timestamptz(6)
+  score                         Decimal?                       @db.Decimal(5, 2)
+  patientPrepScore              Decimal?                       @db.Decimal(5, 2)
+  patientPrepScores             Json?                          @db.Json
+  questionSetScore              Decimal?                       @db.Decimal(5, 2)
+  isSandbox                     Boolean                        @default(false)
+  preparedExamId                Int?
+  bodyPartId                    Int?
+  softwareVendor                String?                        @db.VarChar(255)
+  softwareVersion               String?                        @db.VarChar(255)
+  User                          User?                          @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  MultipleChoiceQuestionResults MultipleChoiceQuestionResult[]
+  QuestionSetResults            QuestionSetResult[]
+
+  @@index([userId], map: "test_runs_user_id")
+  @@map("TestRuns")
+}
+
+model TranslatedContent {
+  id        Int      @id @default(autoincrement())
+  key       String   @unique(map: "translated_contents_key") @db.VarChar(255)
+  content   Json
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+  locked    Boolean  @default(false)
+
+  @@map("TranslatedContents")
+}
+
+model Upload {
+  id                        Int                        @id @default(autoincrement())
+  pathKey                   String                     @unique @db.VarChar(255)
+  createdAt                 DateTime                   @default(now()) @db.Timestamptz(6)
+  updatedAt                 DateTime                   @updatedAt @db.Timestamptz(6)
+  filename                  String?
+  JoinUploadToDicomFileSets JoinUploadToDicomFileSet[]
+
+  @@map("Uploads")
+}
+
+model WeightBasedDose {
+  id           Int      @id @default(autoincrement())
+  weightMetric Float
+  contrastDose Float
+  rate         Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("WeightBasedDoses")
+}
+
+model User {
+  id                                       Int                            @id @default(autoincrement())
+  vendorStylePreference                    String?                        @db.VarChar(255)
+  fieldStrengthPreference                  String?                        @db.VarChar(255)
+  defaultLanguageCode                      String?                        @default("en")
+  softwareVendorPreference                 String?                        @db.VarChar(255)
+  softwareVersionPreference                String?                        @db.VarChar(255)
+  sliceFrameRate                           String?                        @db.VarChar(255)
+  scientificMode                           Json?
+  createdAt                                DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt                                DateTime                       @updatedAt @db.Timestamptz(6)
+  isAdmin                                  Boolean?
+  passHash                                 String                         @db.VarChar(255)
+  email                                    String                         @unique @db.VarChar(255)
+  legalName                                String                         @db.VarChar(255)
+  nickName                                 String?                        @db.VarChar(255)
+  language                                 String?                        @db.VarChar(255)
+  lastIP                                   String?                        @db.VarChar(255)
+  minJWTGeneratedAt                        DateTime                       @default(now()) @db.Timestamptz(6)
+  injectionMode                            Int                            @default(2)
+  injectCondition                          Int                            @default(1)
+  defaultContrastOnlyProtocol              Int                            @default(2)
+  defaultContrastAndSalineProtocol         Int                            @default(1)
+  sliceExpansionBehavior                   Int                            @default(1)
+  preferredAnswerCriteriaByStackQuestionId Json?
+  preferredTimingMethod                    String?                        @db.VarChar(20)
+  emailVerified                            Boolean                        @default(true)
+  emailVerifyToken                         String?                        @db.VarChar(255)
+  emailVerifyTokenExpiresAt                DateTime?                      @db.Timestamptz(6)
+
+  CohortManagers                           CohortManager[]
+  CohortStudents                           CohortStudent[]
+  MultipleChoiceQuestionResults            MultipleChoiceQuestionResult[]
+  QuestionSetResults                       QuestionSetResult[]
+  RegistrationCodes                        RegistrationCode[]
+  Roles                                    Role[]
+  TestRuns                                 TestRun[]
+  StackQuestionResults                     StackQuestionResult[]
+  CommentsViewed                           StackQuestionResultComment[]   @relation("ViewedUser")
+  CommentsMade                             StackQuestionResultComment[]   @relation("CommentedUser")
+  userInfo                                 UserInformation?              @relation("UserToUserInformation")
+  InterventionRulesCreated                 InterventionRule[]
+  Notifications                            Notification[]
+  NotificationPreferences                  NotificationPreference[]
+  UserPhone                                UserPhone?
+
+  @@map("Users")
+}
+
+model InterventionRule {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  domain        String   @db.VarChar(16)
+  skillId       String?  @db.VarChar(255)
+  categoryId    Int?
+  level         String?  @db.VarChar(16)
+  metric        String?  @db.VarChar(32)
+  aggregation   String?  @db.VarChar(32)
+  scope         String?  @db.VarChar(16)
+  fromValue     Decimal  @db.Decimal(10, 3)
+  toValue       Decimal  @db.Decimal(10, 3)
+  interventions Json
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt      @db.Timestamptz(6)
+  createdBy     Int
+
+  category Category? @relation(fields: [categoryId], references: [id])
+  author   User      @relation(fields: [createdBy], references: [id])
+
+  @@index([domain, skillId])
+  @@index([domain, categoryId, level])
+  @@index([domain, metric])
+  @@map("InterventionRules")
+}
+
+model UserInformation {
+  id                                       Int                   @id @default(autoincrement())
+  userId                                   Int                   @unique
+  vendorStylePreference                    String?               @db.VarChar(255)
+  fieldStrengthPreference                  String?               @db.VarChar(255)
+  defaultLanguageCode                      String?               @default("en")
+  softwareVendorPreference                 String?               @db.VarChar(255)
+  softwareVersionPreference                String?               @db.VarChar(255)
+  sliceFrameRate                           String?               @db.VarChar(255)
+  scientificMode                           Json?
+  isAdmin                                  Boolean?
+  passHash                                 String                @db.VarChar(255)
+  email                                    String                @unique @db.VarChar(255)
+  legalName                                String                @db.VarChar(255)
+  nickName                                 String?               @db.VarChar(255)
+  language                                 String?               @db.VarChar(255)
+  lastIP                                   String?               @db.VarChar(255)
+  lastIPs                                  Json?                 @default("[]")
+  minJWTGeneratedAt                        DateTime              @default(now()) @db.Timestamptz(6)
+  injectionMode                            Int                   @default(2)
+  injectCondition                          Int                   @default(1)
+  defaultContrastOnlyProtocol              Int                   @default(1)
+  defaultContrastAndSalineProtocol         Int                   @default(3)
+  sliceExpansionBehavior                   Int                   @default(1)
+  preferredAnswerCriteriaByStackQuestionId Json?
+  preferredTimingMethod                    String?               @db.VarChar(20)
+  settings                                 Json                  @default("{}")
+  createdAt                                DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                                DateTime              @updatedAt @db.Timestamptz(6)
+  user                                     User?                 @relation("UserToUserInformation", fields: [userId], references: [id])
+
+  @@map("UserInformations")
+}
+
+model QuestionGroup {
+  id               Int            @id @default(autoincrement())
+  name             String
+  type             QuestionType
+  questionIds      Int[]
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  PreparedExamPost PreparedExam[] @relation("PostQuestionGroup")
+  PreparedExamPre  PreparedExam[] @relation("PreQuestionGroup")
+
+  @@map("QuestionGroups")
+}
+
+model ApiKey {
+  id               Int                     @id @default(autoincrement())
+  name             String                  @db.VarChar(255)
+  keyPrefix        String                  @unique @db.VarChar(10)
+  keyHash          String                  @db.VarChar(255)
+  cohortId         Int
+  isActive         Boolean                 @default(true)
+  expiresAt        DateTime?               @db.Timestamptz(6)
+  lastUsedAt       DateTime?               @db.Timestamptz(6)
+  rateLimit        Int                     @default(1000) // Requests per hour
+  rateLimitWindow  Int                     @default(3600) // Window in seconds (1 hour)
+  createdAt        DateTime                @default(now()) @db.Timestamptz(6)
+  updatedAt        DateTime                @updatedAt @db.Timestamptz(6)
+  Cohort           Cohort                  @relation(fields: [cohortId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  usage            ApiKeyUsage[]
+  accessAttempts   EndpointAccessAttempt[]
+
+  @@index([cohortId], map: "api_keys_cohort_id")
+  @@index([keyPrefix], map: "api_keys_key_prefix")
+  @@map("ApiKeys")
+}
+
+model ApiKeyUsage {
+  id         Int       @id @default(autoincrement())
+  apiKeyId   Int
+  endpoint   String    @db.VarChar(500)
+  method     String    @db.VarChar(10)
+  statusCode Int
+  timestamp  DateTime  @default(now()) @db.Timestamptz(6)
+  ipAddress  String?   @db.VarChar(45)
+  userAgent  String?   @db.Text
+  apiKey     ApiKey    @relation(fields: [apiKeyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([apiKeyId], map: "api_key_usage_api_key_id")
+  @@index([timestamp], map: "api_key_usage_timestamp")
+  @@map("ApiKeyUsage")
+}
+
+model Endpoint {
+  id                      Int                       @id @default(autoincrement())
+  method                  String                    @db.VarChar(10)
+  path                    String                    @db.VarChar(500)
+  pathPattern             String                    @db.VarChar(500)
+  name                    String                    @db.VarChar(255)
+  description             String?                   @db.Text
+  service                 String?                   @db.VarChar(100)
+  version                 String                    @default("v1") @db.VarChar(20)
+  requiresAuth            Boolean                   @default(true)
+  isActive                Boolean                   @default(false)
+  createdAt               DateTime                  @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime                  @updatedAt @db.Timestamptz(6)
+  cohortPermissions       CohortEndpointPermission[]
+  accessAttempts          EndpointAccessAttempt[]
+
+  @@unique([method, pathPattern, version])
+  @@index([service], map: "endpoints_service")
+  @@index([pathPattern], map: "endpoints_path_pattern")
+  @@map("Endpoints")
+}
+
+model CohortEndpointPermission {
+  id                 Int       @id @default(autoincrement())
+  cohortId           Int
+  endpointId         Int
+  isAllowed          Boolean   @default(true)
+  maxRequestsPerHour Int?
+  description        String?   @db.Text
+  createdAt          DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime  @updatedAt @db.Timestamptz(6)
+  cohort             Cohort    @relation(fields: [cohortId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  endpoint           Endpoint  @relation(fields: [endpointId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([cohortId, endpointId])
+  @@index([cohortId], map: "cohort_endpoint_permissions_cohort_id")
+  @@index([endpointId], map: "cohort_endpoint_permissions_endpoint_id")
+  @@map("CohortEndpointPermissions")
+}
+
+model EndpointAccessAttempt {
+  id              Int       @id @default(autoincrement())
+  apiKeyId        Int?
+  endpointId      Int?
+  method          String    @db.VarChar(10)
+  path            String    @db.VarChar(500)
+  statusCode      Int
+  isAllowed       Boolean
+  denyReason      String?   @db.VarChar(255)
+  timestamp       DateTime  @default(now()) @db.Timestamptz(6)
+  ipAddress       String?   @db.VarChar(45)
+  userAgent       String?   @db.Text
+  requestDuration Int?
+  apiKey          ApiKey?   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  endpoint        Endpoint? @relation(fields: [endpointId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([apiKeyId], map: "endpoint_access_attempts_api_key_id")
+  @@index([endpointId], map: "endpoint_access_attempts_endpoint_id")
+  @@index([timestamp], map: "endpoint_access_attempts_timestamp")
+  @@index([statusCode, isAllowed], map: "endpoint_access_attempts_status")
+  @@map("EndpointAccessAttempts")
+}
+
+model DigitalLocalizer {
+  id              Int          @id @default(autoincrement())
+  bodyPartId      Int          @unique
+  minStep         Int          @default(0)
+  maxStep         Int          @default(339)
+  createdAt       DateTime?    @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime?    @updatedAt @db.Timestamptz(6)
+  bodyPart        BodyPart     @relation(fields: [bodyPartId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  @@map("DigitalLocalizers")
+}
+
+model SequelizeMeta {
+  name String @id @db.VarChar(255)
+}
+
+enum RegistrationCodesStatus {
+  active
+  disabled
+
+  @@map("enum_RegistrationCodes_status")
+}
+
+enum QuestionType {
+  pre
+  post
+}
+
+enum NotificationType {
+  EXAM_ASSIGNED
+  FEEDBACK_RECEIVED
+  ACCOUNT_CREATED
+  COHORT_ACCOUNT_OPENED
+
+  @@map("enum_NotificationType")
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+
+  @@map("enum_NotificationChannel")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String
+  message   String
+  deepLink  String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+  User      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId], map: "notifications_user_id")
+  @@index([userId, isRead], map: "notifications_user_id_is_read")
+  @@map("Notifications")
+}
+
+model NotificationPreference {
+  id        Int                 @id @default(autoincrement())
+  userId    Int
+  channel   NotificationChannel
+  eventType NotificationType
+  enabled   Boolean             @default(true)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @db.Timestamptz(6)
+  User      User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channel, eventType])
+  @@map("NotificationPreferences")
+}
+
+model UserPhone {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @unique
+  phoneNumber  String    @db.VarChar(20)
+  verified     Boolean   @default(true)
+  verifiedAt   DateTime? @db.Timestamptz(6)
+  countryCode  String    @db.VarChar(5)
+  otpCode      String?   @db.VarChar(6)
+  otpExpiresAt DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  User         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("UserPhones")
+}

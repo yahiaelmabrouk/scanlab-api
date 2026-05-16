@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Models" ADD COLUMN     "to" INTEGER DEFAULT 100;

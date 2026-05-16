@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "ContrastRangePresets" ALTER COLUMN "weighting" DROP NOT NULL,
+ALTER COLUMN "magPrep" DROP NOT NULL,
+ALTER COLUMN "sequence" DROP NOT NULL,
+ALTER COLUMN "bodyPartId" DROP NOT NULL;

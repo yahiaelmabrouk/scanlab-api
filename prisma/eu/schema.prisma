@@ -1,0 +1,217 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../../node_modules/@prisma/client/eu"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL_EU")
+}
+
+model MultipleChoiceQuestionResult {
+  id                       Int                    @id @default(autoincrement())
+  answer                   String?
+  createdAt                DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime               @updatedAt @db.Timestamptz(6)
+  userId                   Int
+  multipleChoiceQuestionId Int
+  testRunId                Int?
+  score                    Decimal                @db.Decimal(5, 2)
+  TestRun                  TestRun?               @relation(fields: [testRunId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+
+  @@map("MultipleChoiceQuestionResults")
+}
+
+model StackQuestionResultComment {
+  id                    Int                 @id @default(autoincrement())
+  comment               String?             @default("")
+  seen                  Boolean?            @default(true)
+  seenAt                DateTime?           @default(now()) @db.Timestamptz(6)
+  createdAt             DateTime            @default(now()) @db.Timestamptz(6)
+  lastedUpdatedAt       DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt             DateTime            @updatedAt @db.Timestamptz(6)
+  commentedUserId       Int?
+  viewedUserId          Int?
+  stackQuestionResultId Int
+  StackQuestionResult   StackQuestionResult @relation(fields: [stackQuestionResultId], references: [id], onDelete: Cascade)
+
+  @@index([stackQuestionResultId], map: "sqr_comments_sqr_id")
+  @@map("StackQuestionResultComments")
+}
+
+model StackQuestionResult {
+  id                         Int                          @id @default(autoincrement())
+  score                      Decimal?                     @db.Decimal(5, 2)
+  attemptedAnswerIdentifier  String?                      @db.VarChar(255)
+  createdAt                  DateTime                     @default(now()) @db.Timestamptz(6)
+  updatedAt                  DateTime                     @updatedAt @db.Timestamptz(6)
+  answer                     Json?                        @db.Json
+  comment                    String?                      @default("")
+  commentCreatedAt           DateTime?                    @default(now()) @db.Timestamptz(6)
+  commentedUserId            Int?
+  commentSeenAt              DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedAdminComment       Boolean?                     @default(true)
+  reply                      String?                      @default("")
+  replyCreatedAt             DateTime?                    @default(now()) @db.Timestamptz(6)
+  replySeenAt                DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedUserReply          Boolean?                     @default(true)
+  adminReply                 String?                      @default("")
+  adminReplyCreatedAt        DateTime?                    @default(now()) @db.Timestamptz(6)
+  adminRepliedUserId         Int?
+  adminReplySeenAt           DateTime?                    @default(now()) @db.Timestamptz(6)
+  isViewedAdminReply         Boolean?                     @default(true)
+  questionSetResultId        Int?
+  stackQuestionId            Int?
+  skillScores                Json?
+  groupScoreVariables        Json?
+  sliceQuantScores           Json?
+  sliceViews                 Json?
+  answerViews                Json?
+  skipped                    Boolean?
+  freebie                    Boolean?
+  QuestionSetResult          QuestionSetResult?           @relation(fields: [questionSetResultId], references: [id], onDelete: Cascade)
+  StackQuestionResultComment StackQuestionResultComment[]
+
+  @@index([questionSetResultId], map: "stack_question_results_qsr_id")
+  @@index([stackQuestionId], map: "stack_question_results_sq_id")
+  @@map("StackQuestionResults")
+}
+
+model QuestionSetResult {
+  id                   Int                   @id @default(autoincrement())
+  score                Decimal?              @db.Decimal(5, 2)
+  sliceQuantScore      Decimal?              @db.Decimal(5, 2)
+  overallSkillScores   Json?                 @db.Json
+  createdAt            DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt            DateTime              @updatedAt @db.Timestamptz(6)
+  isViewedAdminComment Boolean?              @default(true)
+  isViewedUserReply    Boolean?              @default(true)
+  isViewedAdminReply   Boolean?              @default(true)
+  userId               Int
+  questionSetId        Int?
+  testRunId            Int?
+  isChallengeMode      Boolean?
+  TestRun              TestRun?              @relation(fields: [testRunId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  StackQuestionResults StackQuestionResult[]
+
+  @@index([userId], map: "question_set_results_user_id")
+  @@index([testRunId], map: "question_set_results_test_run_id")
+  @@map("QuestionSetResults")
+}
+
+model TestRun {
+  id                            Int                            @id @default(autoincrement())
+  userId                        Int?
+  questions                     Json?                          @db.Json
+  answers                       Json?                          @db.Json
+  secondsActive                 Int?
+  timeStarted                   DateTime?                      @db.Timestamptz(6)
+  timeEnded                     DateTime?                      @db.Timestamptz(6)
+  createdAt                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @db.Timestamptz(6)
+  score                         Decimal?                       @db.Decimal(5, 2)
+  patientPrepScore              Decimal?                       @db.Decimal(5, 2)
+  patientPrepScores             Json?                          @db.Json
+  questionSetScore              Decimal?                       @db.Decimal(5, 2)
+  isSandbox                     Boolean                        @default(false)
+  preparedExamId                Int?
+  bodyPartId                    Int?
+  softwareVendor                String?                        @db.VarChar(255)
+  softwareVersion               String?                        @db.VarChar(255)
+  MultipleChoiceQuestionResults MultipleChoiceQuestionResult[]
+  QuestionSetResults            QuestionSetResult[]
+
+  @@index([userId], map: "test_runs_user_id")
+  @@map("TestRuns")
+}
+
+model UserInformation {
+  id                                       Int      @id @default(autoincrement())
+  userId                                   Int      @unique
+  vendorStylePreference                    String?  @db.VarChar(255)
+  fieldStrengthPreference                  String?  @db.VarChar(255)
+  defaultLanguageCode                      String?  @default("en")
+  softwareVendorPreference                 String?  @db.VarChar(255)
+  softwareVersionPreference                String?  @db.VarChar(255)
+  sliceFrameRate                           String?  @db.VarChar(255)
+  scientificMode                           Json?
+  isAdmin                                  Boolean?
+  passHash                                 String   @db.VarChar(255)
+  email                                    String   @unique @db.VarChar(255)
+  legalName                                String   @db.VarChar(255)
+  nickName                                 String?  @db.VarChar(255)
+  language                                 String?  @db.VarChar(255)
+  lastIP                                   String?  @db.VarChar(255)
+  lastIPs                                  Json?    @default("[]")
+  minJWTGeneratedAt                        DateTime @default(now()) @db.Timestamptz(6)
+  injectionMode                            Int      @default(2)
+  injectCondition                          Int      @default(1)
+  defaultContrastOnlyProtocol              Int      @default(2)
+  defaultContrastAndSalineProtocol         Int      @default(1)
+  sliceExpansionBehavior                   Int      @default(1)
+  preferredAnswerCriteriaByStackQuestionId Json?
+  preferredTimingMethod                    String?               @db.VarChar(20)
+  settings                                 Json                  @default("{}")
+  createdAt                                DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                                DateTime              @updatedAt @db.Timestamptz(6)
+
+  @@map("UserInformations")
+}
+
+enum NotificationType {
+  EXAM_ASSIGNED
+  FEEDBACK_RECEIVED
+  ACCOUNT_CREATED
+  COHORT_ACCOUNT_OPENED
+
+  @@map("enum_NotificationType")
+}
+
+enum NotificationChannel {
+  in_app
+  email
+  sms
+
+  @@map("enum_NotificationChannel")
+}
+
+model Notification {
+  id        Int              @id @default(autoincrement())
+  userId    Int
+  type      NotificationType
+  title     String
+  message   String
+  deepLink  String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([userId], map: "notifications_user_id")
+  @@index([userId, isRead], map: "notifications_user_id_is_read")
+  @@map("Notifications")
+}
+
+model NotificationPreference {
+  id        Int                 @id @default(autoincrement())
+  userId    Int
+  channel   NotificationChannel
+  eventType NotificationType
+  enabled   Boolean             @default(true)
+  createdAt DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime            @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, channel, eventType])
+  @@map("NotificationPreferences")
+}
+
+model UserPhone {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  phoneNumber String    @db.VarChar(20)
+  verified    Boolean   @default(true)
+  verifiedAt  DateTime? @db.Timestamptz(6)
+  countryCode String    @db.VarChar(5)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@map("UserPhones")
+}
