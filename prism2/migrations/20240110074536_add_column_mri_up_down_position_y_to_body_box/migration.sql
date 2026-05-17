@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "BodyBoxes" ADD COLUMN     "mriUpDownPositionY" DOUBLE PRECISION NOT NULL DEFAULT 0;

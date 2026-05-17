@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "BodyBoxes" ADD COLUMN     "height" DOUBLE PRECISION NOT NULL DEFAULT 20;

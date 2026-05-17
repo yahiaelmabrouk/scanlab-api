@@ -45,10 +45,10 @@ describe('Intervention Rules controller', () => {
     it('returns 200 with bucketed payload for cohort managers', async () => {
       adminState.isAdmin = false
       adminState.isCohortManager = true
-      svc.listAllBucketed.mockResolvedValue({ clinical: {}, didactic: {} })
+      svc.listAllBucketed.mockResolvedValue({ clinical: {}, didactic: {}, consistency: {} })
       const res = await request(app).get('/intervention-rules')
       expect(res.status).toBe(200)
-      expect(res.body).toEqual({ success: true, clinical: {}, didactic: {} })
+      expect(res.body).toEqual({ success: true, clinical: {}, didactic: {}, consistency: {} })
     })
 
     it('returns 403 when neither admin nor cohort manager', async () => {
@@ -62,7 +62,7 @@ describe('Intervention Rules controller', () => {
 
   describe('GET /admin/intervention-rules', () => {
     it('returns 200 for admins', async () => {
-      svc.listAllBucketed.mockResolvedValue({ clinical: {}, didactic: {} })
+      svc.listAllBucketed.mockResolvedValue({ clinical: {}, didactic: {}, consistency: {} })
       const res = await request(app).get('/admin/intervention-rules')
       expect(res.status).toBe(200)
     })

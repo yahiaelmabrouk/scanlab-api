@@ -86,11 +86,11 @@ const SliceQuantGradingUltraLabUtil = {
         directional: true,
         ignore: false,
         scoringTooHigh: {
-          linearFactor: 50,
+          linearFactor: 333.3,
           maximumPointLoss: 100,
         },
         scoringTooLow: {
-          linearFactor: 50,
+          linearFactor: 200,
           maximumPointLoss: 100,
         },
         feedback: {
@@ -101,11 +101,11 @@ const SliceQuantGradingUltraLabUtil = {
         directional: true,
         ignore: false,
         scoringTooHigh: {
-          linearFactor: 50,
+          linearFactor: 333.3,
           maximumPointLoss: 100,
         },
         scoringTooLow: {
-          linearFactor: 50,
+          linearFactor: 200,
           maximumPointLoss: 100,
         },
         feedback: {
@@ -554,11 +554,11 @@ const SliceQuantGradingUltraLabUtil = {
         directional: true,
         ignore: false,
         scoringTooHigh: {
-          linearFactor: 50,
+          linearFactor: 333.3,
           maximumPointLoss: 100,
         },
         scoringTooLow: {
-          linearFactor: 50,
+          linearFactor: 200,
           maximumPointLoss: 100,
         },
         feedback: {
@@ -569,11 +569,11 @@ const SliceQuantGradingUltraLabUtil = {
         directional: true,
         ignore: false,
         scoringTooHigh: {
-          linearFactor: 50,
+          linearFactor: 333.3,
           maximumPointLoss: 100,
         },
         scoringTooLow: {
-          linearFactor: 50,
+          linearFactor: 200,
           maximumPointLoss: 100,
         },
         feedback: {
@@ -604,10 +604,6 @@ const SliceQuantGradingUltraLabUtil = {
   adjustImageResultGradingForScanTime(answer, selectedAnswer, modifiers, overrides) {
     const preScore = this.calculateGroupScoreVars(answer, selectedAnswer, modifiers, overrides)
     const scanTimeResult = preScore.groupScoreVariables[0].analysis.find((x) => x.keyName === 'scan_time')
-    if (scanTimeResult.key.match(/correct/)) {
-      selectedAnswer['0_max'].trEfficiency = _.ceil(answer[0].trEfficiency)
-    }
-
     if (scanTimeResult.key.match(/small|correct/)) {
       const snrResult = preScore.groupScoreVariables[0].analysis.find((x) => x.keyName === 'snr')
       if (snrResult.key.match(/big/)) {

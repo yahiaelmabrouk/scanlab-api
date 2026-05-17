@@ -301,6 +301,12 @@ const CriticalThinkingQuestionSvc = {
       // Persist MultiChoiceQuestionResults
       for (const criticalThinkingResult of criticalThinkingResults) {
         let { selectedAnswer, score, multipleChoiceQuestionId, screeningForm } = criticalThinkingResult
+        // TODO(follow-up): when selectedAnswer is nil this writes the literal string 'null'
+        // (JSON.stringify(null) === 'null') into MultipleChoiceQuestionResults.answer for
+        // abandoned questions. Should store real null instead, plus a data migration to fix
+        // existing rows in both schemas: UPDATE "MultipleChoiceQuestionResults" SET answer = NULL
+        // WHERE answer = 'null'. Currently worked around at statistic.service.js getStatisticMcWhomSql
+        // via NULLIF(answer, 'null'); remove that workaround once this is fixed.
         const answer = isString(selectedAnswer) ? selectedAnswer : JSON.stringify(selectedAnswer)
         await modelProvider.MultipleChoiceQuestionResult.create(
           {

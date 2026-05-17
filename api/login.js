@@ -2,13 +2,9 @@ const express = require('express')
 const router = express.Router()
 const _ = require('lodash')
 const moment = require('moment/moment')
-const { v4: uuidv4 } = require('uuid')
-const { Op } = require('sequelize')
 const { sequelize, User, RegistrationCode, Cohort, CohortStudent } = require('../db/models')
 const { jwtEncode, jwtDecode } = require('../util/jwt')
 const { sendMail } = require('../util/email')
-const { emailVerificationTemplate, cohortAccountOpenedTemplate } = require('../util/emailTemplates')
-const { notifyUser } = require('./services/notification.service')
 const logger = require('../util/logger')
 const { errorHandler } = require('./api_util/api_util')
 const { updateCounts } = require('./api_util/cohorts')
@@ -16,8 +12,7 @@ const { v, Joi } = require('./api_util/validator')
 const { generatePasswordHash, validatePasswordHash } = require('./api_util/authentication')
 const { checkAccountValid } = require('../api/api_util/registrationCode')
 const ModelProvider = require('./providers/model.provider')
-
-const VERIFY_TOKEN_TTL_HOURS = 24
+const notificationEvents = require('./services/notificationEvents')
 
 const registrationValidation = {
   body: Joi.object({
@@ -30,12 +25,9 @@ const registrationValidation = {
   }),
 }
 router.post('/user/create', v(registrationValidation), async function (req, res) {
-  let createdUserId = null
-  let verifyToken = null
-  let createdUserEmail = null
-  let createdUserName = null
-  let createdCohortName = null
-
+  // Captured inside the transaction, used to fire notifications after it commits.
+  let createdUser = null
+  let createdCohort = null
   await sequelize.transaction(async (transaction) => {
     let hash = await generatePasswordHash(req.body.password)
 
@@ -69,11 +61,11 @@ router.post('/user/create', v(registrationValidation), async function (req, res)
       return errorHandler(res, { error_description: 'Email already in use' })
     }
 
-    verifyToken = uuidv4()
-    const emailVerifyTokenExpiresAt = moment().add(VERIFY_TOKEN_TTL_HOURS, 'hours').toDate()
-
+    // const userRegion = USER_AREA.US_EAST
     let user = await User.create(
       {
+        // region: userRegion,
+        // TODO: remove when we migration all data to the new UserInformation model
         nickName: req.body.nickName,
         legalName: req.body.legalName,
         email: req.body.email,
@@ -82,13 +74,11 @@ router.post('/user/create', v(registrationValidation), async function (req, res)
         vendorStylePreference: 'siemens',
         sliceFrameRate: 'Medium',
         language: req.body.language,
-        emailVerified: false,
-        emailVerifyToken: verifyToken,
-        emailVerifyTokenExpiresAt,
       },
       { transaction }
     )
 
+    // You must create a CohortStudent entry for the user
     await CohortStudent.create(
       {
         cohortId: registrationCode.cohort.id,
@@ -99,6 +89,9 @@ router.post('/user/create', v(registrationValidation), async function (req, res)
       { transaction }
     )
 
+    // The transaction is not committed until the end of this block
+    // We must retrieve the ModelProvider instance for the cohort
+    // and create the UserInformation entry in the correct schema
     const modelProvider = await ModelProvider.getModelProviderFromCohortId(registrationCode.cohort.id)
     await modelProvider.UserInformation.create(
       {
@@ -116,42 +109,20 @@ router.post('/user/create', v(registrationValidation), async function (req, res)
     )
 
     await updateCounts(registrationCode.cohort, transaction)
+
     await registrationCode.update({ used: true, activationDate: new Date(), userId: user.id }, { transaction })
 
-    createdUserId = user.id
-    createdUserEmail = req.body.email
-    createdUserName = req.body.nickName || req.body.legalName
-    createdCohortName = registrationCode.cohort.name
+    createdUser = user
+    createdCohort = registrationCode.cohort
+
+    return res.json({ success: true, userID: user.id })
   })
 
-  if (createdUserId) {
-    const origin = req.get('origin') || ''
-
-    // Verification email — sent directly (bypasses emailVerified guard intentionally)
-    const verificationLink = `${origin}/verify-email?token=${verifyToken}`
-    const verifyTemplate = emailVerificationTemplate(createdUserName, verificationLink)
-    sendMail({ to: createdUserEmail, ...verifyTemplate }).catch((err) =>
-      logger.error(`[verifyEmail] Failed to send verification email to user ${createdUserId}: ${err.message}`)
-    )
-
-    // In-app: account created
-    notifyUser(createdUserId, 'ACCOUNT_CREATED', {
-      title: 'Welcome to ScanLab',
-      message: `Your account has been created. Please verify your email to get started.`,
-    }).catch((err) => logger.error(`[ACCOUNT_CREATED] notify failed for user ${createdUserId}: ${err.message}`))
-
-    // In-app + email: cohort account opened (email only once verified)
-    const { subject: cohortSubject, html: cohortHtml } = cohortAccountOpenedTemplate(createdCohortName, origin || 'https://app.scanlabmr.com')
-    notifyUser(createdUserId, 'COHORT_ACCOUNT_OPENED', {
-      title: `Your ${createdCohortName} account is ready`,
-      message: `Your ScanLab account for ${createdCohortName} is now open.`,
-      emailSubject: cohortSubject,
-      emailHtml: cohortHtml,
-    }).catch((err) => logger.error(`[COHORT_ACCOUNT_OPENED] notify failed for user ${createdUserId}: ${err.message}`))
-
-    return res.json({ success: true, userID: createdUserId })
+  // Fire-and-forget, post-commit: welcome the new student and alert cohort managers.
+  if (createdUser && createdCohort) {
+    notificationEvents.notifyCohortAccountOpened(createdUser.id, createdCohort.id)
+    notificationEvents.notifyAccountCreated(createdCohort.id, createdUser.legalName)
   }
-  // Error paths already responded via errorHandler inside the transaction callback
 })
 
 const loginValidation = {
@@ -318,51 +289,6 @@ router.post('/recievePasswordReset/:token', async function (req, res) {
   }
 
   res.json({ success: true })
-})
-
-router.get('/verifyEmail', async function (req, res) {
-  const { token } = req.query
-
-  if (!token) {
-    return res.status(400).json({ success: false, error_description: 'Token required' })
-  }
-
-  const user = await User.findOne({
-    where: {
-      emailVerifyToken: token,
-      emailVerifyTokenExpiresAt: { [Op.gt]: new Date() },
-    },
-  })
-
-  if (!user) {
-    return res.status(400).json({ success: false, error_description: 'Invalid or expired verification token' })
-  }
-
-  await user.update({
-    emailVerified: true,
-    emailVerifyToken: null,
-    emailVerifyTokenExpiresAt: null,
-  })
-
-  logger.info(`[verifyEmail] User ${user.id} verified their email`)
-
-  // Now that email is verified, send the cohort welcome email that was skipped at registration
-  setImmediate(async () => {
-    try {
-      const cohortStudent = await CohortStudent.findOne({ where: { userId: user.id } })
-      if (cohortStudent) {
-        const cohort = await Cohort.findByPk(cohortStudent.cohortId)
-        const cohortName = cohort?.name || 'ScanLab'
-        const origin = req.get('origin') || process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
-        const { subject, html } = cohortAccountOpenedTemplate(cohortName, origin)
-        await sendMail({ to: user.email, subject, html })
-      }
-    } catch (err) {
-      logger.error(`[verifyEmail] Failed to send welcome email to user ${user.id}: ${err.message}`)
-    }
-  })
-
-  return res.json({ success: true })
 })
 
 module.exports = router

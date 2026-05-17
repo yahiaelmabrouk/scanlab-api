@@ -651,8 +651,7 @@ const getCombinedAngleAndWastedSlicesOfMultiUserSql = (where, pagination, option
 }
 
 const PRACTICE_EXAM_IDS = { MR: 48, CT: 7 }
-const getPracticeExamId = () =>
-  process.env.APP_MODALITY === 'CT' ? PRACTICE_EXAM_IDS.CT : PRACTICE_EXAM_IDS.MR
+const getPracticeExamId = () => (process.env.APP_MODALITY === 'CT' ? PRACTICE_EXAM_IDS.CT : PRACTICE_EXAM_IDS.MR)
 
 /**
  * @param {object} where
@@ -693,6 +692,11 @@ const getMCAverageSql = (where, pagination, options = {}) => {
     WHERE
       ${whereObjectToSql(where, true, 'u')}
       AND (tr."preparedExamId" IS DISTINCT FROM ${practiceExamId})
+      -- Exclude abandoned MC questions (no answer selected) from the average.
+      -- TODO(follow-up): abandoned results store the literal string 'null'
+      -- (JSON.stringify(null)); see criticalThinkingQuestion.service.js ~line 304.
+      -- Drop the NULLIF once the persistence bug is fixed and existing rows are migrated.
+      AND NULLIF(mcqr."answer", 'null') IS NOT NULL
     GROUP BY
       u."id",
       COALESCE (ui."legalName", uei."legalName", 'N/A'),
@@ -1022,12 +1026,16 @@ const getStatisticMcWhomSql = (where, pagination, options = {}) => {
     ],
     {
       region: options.region,
-    },
+    }
   )}
     SELECT
       u."id" AS "userId",
       COALESCE (ui."legalName", uei."legalName", 'N/A') AS "name",
       mcqr."score" AS "score",
+      -- TODO(follow-up): NULLIF works around abandoned MC results storing the literal string
+      -- 'null' (see criticalThinkingQuestion.service.js ~line 304). Drop the NULLIF once the
+      -- persistence bug is fixed and existing 'null' rows are migrated to real NULL.
+      NULLIF(mcqr."answer", 'null') AS "answer",
       cat."name" AS "category",
       mcq."difficulty" AS "difficulty",
       mcqr."createdAt" AS "timestamp",

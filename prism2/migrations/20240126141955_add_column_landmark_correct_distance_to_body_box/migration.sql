@@ -1,2 +1,0 @@
--- AlterTable
-ALTER TABLE "BodyBoxes" ADD COLUMN "landmarkTolerance" DOUBLE PRECISION NOT NULL DEFAULT 1;

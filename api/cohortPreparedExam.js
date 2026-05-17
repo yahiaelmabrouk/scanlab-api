@@ -1,10 +1,9 @@
 const express = require('express')
 
 const { fetchLoggedInUser } = require('./api_util/api_util')
-const { CohortPreparedExam, CohortStudent, PreparedExam } = require('../db/models')
-const { notifyUser } = require('./services/notification.service')
-const { examAssignedTemplate } = require('../util/emailTemplates')
-const logger = require('../util/logger')
+const notificationEvents = require('./services/notificationEvents')
+
+const { CohortPreparedExam } = require('../db/models')
 
 const router = express.Router()
 
@@ -41,43 +40,12 @@ router.post('/cohort-prepared-exams', fetchLoggedInUser, async function (req, re
     if (!ids.includes(exam.examId)) await exam.destroy()
   }
 
-  // Fire-and-forget: notify each student in the cohort for each newly assigned exam
+  // Fire-and-forget: notify cohort students of newly assigned exams.
   if (createdExams.length > 0) {
-    const origin = req.get('origin') || process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
-    setImmediate(async () => {
-      try {
-        const [students, examRecords] = await Promise.all([
-          CohortStudent.findAll({
-            where: { cohortId },
-            attributes: ['userId'],
-          }),
-          PreparedExam.findAll({
-            where: { id: createdExams.map((e) => e.examId) },
-            attributes: ['id', 'title'],
-          }),
-        ])
-
-        const examMap = Object.fromEntries(examRecords.map((e) => [e.id, e.title]))
-
-        for (const student of students) {
-          if (!student.userId) continue
-          for (const exam of createdExams) {
-            const examName = examMap[exam.examId] || 'New Exam'
-            const deepLink = `${origin}/exams/${exam.examId}`
-            const { subject, html } = examAssignedTemplate(examName, deepLink)
-            notifyUser(student.userId, 'EXAM_ASSIGNED', {
-              title: `New exam assigned: ${examName}`,
-              message: `A new exam has been assigned to you: ${examName}`,
-              deepLink,
-              emailSubject: subject,
-              emailHtml: html,
-            }).catch((err) => logger.error(`[EXAM_ASSIGNED] notify failed for user ${student.userId}: ${err.message}`))
-          }
-        }
-      } catch (err) {
-        logger.error(`[EXAM_ASSIGNED] trigger failed: ${err.message}`)
-      }
-    })
+    notificationEvents.notifyExamAssigned(
+      cohortId,
+      createdExams.map((e) => e.examId)
+    )
   }
 
   res.json({ success: true, preparedExams: createdExams })

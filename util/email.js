@@ -13,6 +13,10 @@ const client = process.env.SENDGRID_APIKEY
     )
   : null
 
+if (!client) {
+  logger.warn('[email] SendGrid not configured (SENDGRID_APIKEY missing) — emails will be logged to stdout only')
+}
+
 async function sendMail(email) {
   if (client) {
     const result = await client.sendMail(_.extend(email, { from: 'questions@scanlabmr.com' }))

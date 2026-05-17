@@ -19,7 +19,7 @@ const PatientPrepUtil = {
       )
     }
 
-    output.combinedScore = _.meanBy(output.scores, 'combinedScore')
+    output.combinedScore = output.scores.length ? _.meanBy(output.scores, 'combinedScore') : 0
     return output
   },
 
