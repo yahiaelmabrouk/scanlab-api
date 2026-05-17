@@ -88,11 +88,11 @@ module.exports = (sequelize, DataTypes) => {
       },
       defaultContrastOnlyProtocol: {
         type: DataTypes.INTEGER,
-        defaultValue: 2,
+        defaultValue: 1,
       },
       defaultContrastAndSalineProtocol: {
         type: DataTypes.INTEGER,
-        defaultValue: 1,
+        defaultValue: 3,
       },
       sliceExpansionBehavior: {
         type: DataTypes.INTEGER,

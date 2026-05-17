@@ -34,7 +34,7 @@ const SliceQuantGradingResolutionUtil = {
           maximumPointLoss: 100,
         },
         feedback: {
-          precision: 1,
+          precision: 2,
         },
       },
       frequencyVoxelSize: {
@@ -49,7 +49,7 @@ const SliceQuantGradingResolutionUtil = {
           maximumPointLoss: 100,
         },
         feedback: {
-          precision: 1,
+          precision: 2,
         },
       },
     }

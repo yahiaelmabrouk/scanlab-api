@@ -989,7 +989,7 @@ const TestSvc = {
     // Derive reposition question IDs from stackQuestions directly, instead of
     // from the partially-built stackQuestionResults that used to exist only
     // inside the transaction.
-    let patientPrepScores
+    let patientPrepScores = isCTLab ? { scores: [], combinedScore: 0 } : undefined
     if (isCTLab && stackQuestionAnswers.length > 0) {
       let patientPrepAnswers = []
       // Since initial patient prep factors are mixed in with question set answers, we need to
@@ -1072,6 +1072,7 @@ const TestSvc = {
                 'stackQuestionId',
                 'freebie',
               ]),
+              questionType: q.questionType,
               stackQuestion: {
                 questionText: q.questionText,
                 order: q.order,
@@ -1172,7 +1173,7 @@ const TestSvc = {
 
       // MRI Score: avg of the MRI question result scores
       questionSetResult.score =
-        stackQuestionResults.length > 0
+        skippedFilteredStackQuestions.length > 0
           ? _.round(
               _.meanBy(skippedFilteredStackQuestions, (a) => _.toNumber(a.score)),
               2
@@ -1181,7 +1182,7 @@ const TestSvc = {
 
       // CT Score: avg of the CT question result scores from sliceQuant values
       questionSetResult.sliceQuantScore =
-        stackQuestionResults.length > 0
+        skippedFilteredStackQuestions.length > 0
           ? _.round(
               _.meanBy(skippedFilteredStackQuestions, (a) => _.toNumber(a.sliceQuantScores?.combinedScore)),
               2

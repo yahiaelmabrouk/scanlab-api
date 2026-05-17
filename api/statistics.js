@@ -15,6 +15,115 @@ const { parsePaginationParams, formatPaginatedResponse } = require('./api_util/p
 // Track in-flight background recalculations to avoid duplicate work
 const _recalcInProgress = new Set()
 
+// Helper to calculate wasted slices and raw wasted coverage (mm) for an entry.
+// Coverage values come from the slice prescription score (sliceQuantScores) only —
+// the parameter-score groupScoreVariables can carry coverage values for questions
+// that aren't actually graded on slice coverage.
+const calculateCoverage = (entry) => {
+  const answerData = entry.answer[0]
+  const sliceSize = answerData.spacing + answerData.thickness
+  if (sliceSize === 0) return { slices: 0, coverage: 0 }
+
+  const lowCoverage = entry.sliceCoverageZTooLow
+  const highCoverage = entry.sliceCoverageZTooHigh
+
+  // Match scoring logic: check lowCoverage first (prioritize missing anatomy)
+  const coverage = lowCoverage > 0 ? -1 * lowCoverage : highCoverage
+  return { slices: coverage / sliceSize, coverage }
+}
+
+// Build a metric block (mean / individual / absoluteMean / total / absoluteTotal)
+// from a list of pre-rounded individual values.
+const buildMetricBlock = (individualValues) => {
+  const absoluteValues = individualValues.map(Math.abs)
+  return {
+    individual: individualValues,
+    mean: _.mean(individualValues),
+    absoluteMean: _.mean(absoluteValues),
+    total: _.sum(individualValues),
+    absoluteTotal: _.sum(absoluteValues),
+  }
+}
+
+// Process wasted slices data into the response shape used by /statistics/derived/wastedSlices.
+//
+// Response shape:
+//   {
+//     wastedSlices:   { mean, points: [{ ..., values: { mean, individual, absoluteMean, total, absoluteTotal } }] },
+//     wastedCoverage: { mean, points: [{ ..., values: { mean, individual, absoluteMean, total, absoluteTotal } }] },
+//   }
+//
+// wastedSlices  — coverage-error normalized by each exam's slice size (spacing + thickness).
+//                 Unit: slice count. Comparable within a modality but NOT across CT vs MR
+//                 because slice sizes differ ~3–10×. Use this for MR charts.
+// wastedCoverage — raw coverage error in millimeters (signed: negative = under-coverage,
+//                 positive = over-coverage). Unit-stable across modalities. Use this for CT charts.
+//
+// Multi-slice-group questions yield multiple input rows; rows sharing the same
+// `questionSetResultId|questionOrder` are collapsed to one averaged value per stack
+// question before any aggregation (mirrors /statistics/factors/angle behavior).
+const processWastedSlicesData = (data, showMean, showPoints) => {
+  const basicFiltered = data.filter((d) => _.isNumber(d.sliceCoverageZTooLow) && _.isNumber(d.sliceCoverageZTooHigh))
+
+  const perQuestionValues = (rows) =>
+    _(rows)
+      .groupBy((r) => `${r.questionSetResultId}|${r.questionOrder}`)
+      .map((groupEntries) => {
+        const computed = groupEntries.map(calculateCoverage)
+        return {
+          slices: Math.round(_.meanBy(computed, 'slices') * 10) / 10,
+          coverage: Math.round(_.meanBy(computed, 'coverage') * 10) / 10,
+        }
+      })
+      .value()
+
+  let slicesMean = null
+  let coverageMean = null
+  if (showMean) {
+    const computed = perQuestionValues(basicFiltered)
+    slicesMean = _.meanBy(computed, 'slices')
+    coverageMean = _.meanBy(computed, 'coverage')
+  }
+
+  let slicesPoints = null
+  let coveragePoints = null
+  if (showPoints) {
+    const grouped = _.groupBy(basicFiltered, 'questionSetResultId')
+    const groupedPoints = Object.values(grouped).map((entries) => {
+      const sortedEntries = _.sortBy(entries, 'questionOrder')
+      const computed = _(sortedEntries)
+        .groupBy('questionOrder')
+        .map((groupEntries) => {
+          const perRow = groupEntries.map(calculateCoverage)
+          return {
+            slices: Math.round(_.meanBy(perRow, 'slices') * 10) / 10,
+            coverage: Math.round(_.meanBy(perRow, 'coverage') * 10) / 10,
+          }
+        })
+        .value()
+
+      const sharedMeta = {
+        bodyPart: entries[0].bodyPart,
+        x: entries[0].createdAt.valueOf(),
+        preparedExamId: entries[0].preparedExamId,
+        questionSetResultId: entries[0].questionSetResultId,
+        userId: entries[0]['questionSetResult.userId'],
+      }
+      return {
+        slices: { ...sharedMeta, values: buildMetricBlock(computed.map((c) => c.slices)) },
+        coverage: { ...sharedMeta, values: buildMetricBlock(computed.map((c) => c.coverage)) },
+      }
+    })
+    slicesPoints = groupedPoints.map((p) => p.slices)
+    coveragePoints = groupedPoints.map((p) => p.coverage)
+  }
+
+  return {
+    wastedSlices: { mean: slicesMean, points: slicesPoints },
+    wastedCoverage: { mean: coverageMean, points: coveragePoints },
+  }
+}
+
 // These cohorts skew the global statistics too much
 // These IDs are for the production database only
 // const GLOBAL_COHORTS_TO_IGNORE = [
@@ -565,104 +674,7 @@ router.get('/statistics/derived/wastedSlices', fetchLoggedInUser, async function
     cohortId = req.query.whom.split('_')[1]
   }
 
-  // Helper to calculate wasted slices and raw wasted coverage (mm) for an entry.
-  // Coverage values come from the slice prescription score (sliceQuantScores) only —
-  // the parameter-score groupScoreVariables can carry coverage values for questions
-  // that aren't actually graded on slice coverage.
-  const calculateCoverage = (entry) => {
-    const answerData = entry.answer[0]
-    const sliceSize = answerData.spacing + answerData.thickness
-    if (sliceSize === 0) return { slices: 0, coverage: 0 }
-
-    const lowCoverage = entry.sliceCoverageZTooLow
-    const highCoverage = entry.sliceCoverageZTooHigh
-
-    // Match scoring logic: check lowCoverage first (prioritize missing anatomy)
-    const coverage = lowCoverage > 0 ? -1 * lowCoverage : highCoverage
-    return { slices: coverage / sliceSize, coverage }
-  }
-
-  // Build a metric block (mean / individual / absoluteMean / total / absoluteTotal)
-  // from a list of pre-rounded individual values.
-  const buildMetricBlock = (individualValues) => {
-    const absoluteValues = individualValues.map(Math.abs)
-    return {
-      individual: individualValues,
-      mean: _.mean(individualValues),
-      absoluteMean: _.mean(absoluteValues),
-      total: _.sum(individualValues),
-      absoluteTotal: _.sum(absoluteValues),
-    }
-  }
-
-  // Helper to process wasted slices data.
-  //
-  // Response shape:
-  //   {
-  //     wastedSlices:   { mean, points: [{ ..., values: { mean, individual, absoluteMean, total, absoluteTotal } }] },
-  //     wastedCoverage: { mean, points: [{ ..., values: { mean, individual, absoluteMean, total, absoluteTotal } }] },
-  //   }
-  //
-  // wastedSlices  — coverage-error normalized by each exam's slice size (spacing + thickness).
-  //                 Unit: slice count. Comparable within a modality but NOT across CT vs MR
-  //                 because slice sizes differ ~3–10×. Use this for MR charts.
-  // wastedCoverage — raw coverage error in millimeters (signed: negative = under-coverage,
-  //                 positive = over-coverage). Unit-stable across modalities. Use this for CT charts.
-  const processData = (data, showMean, showPoints) => {
-    const basicFiltered = data.filter(
-      (d) => _.isNumber(d.sliceCoverageZTooLow) && _.isNumber(d.sliceCoverageZTooHigh)
-    )
-
-    let slicesMean = null
-    let coverageMean = null
-    if (showMean) {
-      const computed = basicFiltered.map((d) => {
-        const { slices, coverage } = calculateCoverage(d)
-        return {
-          slices: Math.round(slices * 10) / 10,
-          coverage: Math.round(coverage * 10) / 10,
-        }
-      })
-      slicesMean = _.meanBy(computed, 'slices')
-      coverageMean = _.meanBy(computed, 'coverage')
-    }
-
-    let slicesPoints = null
-    let coveragePoints = null
-    if (showPoints) {
-      const grouped = _.groupBy(basicFiltered, 'questionSetResultId')
-      const groupedPoints = Object.values(grouped).map((entries) => {
-        const sortedEntries = _.sortBy(entries, 'questionOrder')
-        // Round individual values first to avoid floating-point precision issues
-        const computed = sortedEntries.map((entry) => {
-          const { slices, coverage } = calculateCoverage(entry)
-          return {
-            slices: Math.round(slices * 10) / 10,
-            coverage: Math.round(coverage * 10) / 10,
-          }
-        })
-
-        const sharedMeta = {
-          bodyPart: entries[0].bodyPart,
-          x: entries[0].createdAt.valueOf(),
-          preparedExamId: entries[0].preparedExamId,
-          questionSetResultId: entries[0].questionSetResultId,
-          userId: entries[0]['questionSetResult.userId'],
-        }
-        return {
-          slices: { ...sharedMeta, values: buildMetricBlock(computed.map((c) => c.slices)) },
-          coverage: { ...sharedMeta, values: buildMetricBlock(computed.map((c) => c.coverage)) },
-        }
-      })
-      slicesPoints = groupedPoints.map((p) => p.slices)
-      coveragePoints = groupedPoints.map((p) => p.coverage)
-    }
-
-    return {
-      wastedSlices: { mean: slicesMean, points: slicesPoints },
-      wastedCoverage: { mean: coverageMean, points: coveragePoints },
-    }
-  }
+  const processData = processWastedSlicesData
 
   // Updated cache logic for cohort averages
   if (cohortId && showMean && !showPoints) {
@@ -1046,4 +1058,4 @@ router.get('/statistics/cohort-students-report', fetchLoggedInUser, async functi
   }
 })
 
-module.exports = { router, findMCAverageParams }
+module.exports = { router, findMCAverageParams, processWastedSlicesData }

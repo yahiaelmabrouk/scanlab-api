@@ -3,9 +3,7 @@ const { Op } = Sequelize
 const _ = require('lodash')
 const ModelProvider = require('../providers/model.provider')
 const statsCacheHelper = require('../statsCacheHelper')
-const { notifyUser } = require('./notification.service')
-const { feedbackReceivedTemplate } = require('../../util/emailTemplates')
-const logger = require('../../util/logger')
+const notificationEvents = require('./notificationEvents')
 
 const viewComment = async (loggedInUserId, testRunUserId, data) => {
   const modelProvider = await ModelProvider.getModelProvider(testRunUserId)
@@ -22,13 +20,13 @@ const viewComment = async (loggedInUserId, testRunUserId, data) => {
     ON sqrc."commentedUserId" = cu."id"
   LEFT JOIN "Users" vu
     ON sqrc."viewedUserId" = vu."id"
-  LEFT JOIN "public"."UserInformations" cuui
+  LEFT JOIN "public"."UserInformations" cuui 
     ON cuui."userId" = "cu"."id"
-  LEFT JOIN "eu_west_server_public"."UserInformations" cuuei
+  LEFT JOIN "eu_west_server_public"."UserInformations" cuuei 
     ON cuuei."userId" = "cu"."id"
-  LEFT JOIN "public"."UserInformations" vuui
+  LEFT JOIN "public"."UserInformations" vuui 
     ON vuui."userId" = "vu"."id"
-  LEFT JOIN "eu_west_server_public"."UserInformations" vuuei
+  LEFT JOIN "eu_west_server_public"."UserInformations" vuuei 
     ON vuuei."userId" = "vu"."id"
   WHERE sqrc."stackQuestionResultId" = :stackQuestionResultId
   `
@@ -89,25 +87,6 @@ const createComment = async (loggedInUserId, testRunUserId, data) => {
     throw { status: 400, message: 'StackQuestionResultComment not created' }
   }
 
-  const studentUserId = parseInt(testRunUserId, 10)
-  const commenterUserId = parseInt(loggedInUserId, 10)
-
-  // Notify student when an instructor (someone other than the student) leaves feedback
-  if (commenterUserId !== studentUserId) {
-    setImmediate(() => {
-      const base = process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
-      const deepLink = `${base}/test-runs/${testRunUserId}`
-      const { subject, html } = feedbackReceivedTemplate('your scan submission', deepLink)
-      notifyUser(studentUserId, 'FEEDBACK_RECEIVED', {
-        title: 'Feedback received',
-        message: 'Your instructor has left feedback on your scan submission.',
-        deepLink,
-        emailSubject: subject,
-        emailHtml: html,
-      }).catch((err) => logger.error(`[FEEDBACK_RECEIVED] notify failed for user ${studentUserId}: ${err.message}`))
-    })
-  }
-
   // Refresh cache asynchronously after creating comment
   setImmediate(async () => {
     try {
@@ -115,6 +94,23 @@ const createComment = async (loggedInUserId, testRunUserId, data) => {
     } catch (err) {
       console.log('refreshCachesAfterCommentChange failed in createComment', err)
     }
+  })
+
+  // Fire-and-forget: notify the student that feedback was left on their result.
+  // Resolve the test run id for a precise deep link (best-effort).
+  setImmediate(async () => {
+    let testRunId = null
+    try {
+      if (stackQuestionResult.questionSetResultId) {
+        const qsr = await modelProvider.QuestionSetResult.findByPk(stackQuestionResult.questionSetResultId, {
+          attributes: ['testRunId'],
+        })
+        testRunId = qsr ? qsr.testRunId : null
+      }
+    } catch (err) {
+      // Deep link is best-effort; notifyFeedbackReceived falls back to the test-runs list.
+    }
+    notificationEvents.notifyFeedbackReceived(testRunUserId, loggedInUserId, testRunId)
   })
 
   return stackQuestionResultComment
@@ -137,25 +133,6 @@ const updateComment = async (id, loggedInUserId, testRunUserId, data) => {
     lastedUpdatedAt: new Date(),
   })
   await stackQuestionResultComment.save()
-
-  const studentUserId = parseInt(testRunUserId, 10)
-  const commenterUserId = parseInt(loggedInUserId, 10)
-
-  // Re-notify student when instructor edits their feedback
-  if (commenterUserId !== studentUserId) {
-    setImmediate(() => {
-      const base = process.env.APP_BASE_URL || 'https://app.scanlabmr.com'
-      const deepLink = `${base}/test-runs/${testRunUserId}`
-      const { subject, html } = feedbackReceivedTemplate('your scan submission', deepLink)
-      notifyUser(studentUserId, 'FEEDBACK_RECEIVED', {
-        title: 'Feedback updated',
-        message: 'Your instructor has updated their feedback on your scan submission.',
-        deepLink,
-        emailSubject: subject,
-        emailHtml: html,
-      }).catch((err) => logger.error(`[FEEDBACK_RECEIVED] update-notify failed for user ${studentUserId}: ${err.message}`))
-    })
-  }
 
   // Refresh cache asynchronously after updating comment
   setImmediate(async () => {

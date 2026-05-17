@@ -798,8 +798,11 @@ model InterventionRule {
   skillId       String?  @db.VarChar(255)
   categoryId    Int?
   level         String?  @db.VarChar(16)
-  fromScore     Int      @db.SmallInt
-  toScore       Int      @db.SmallInt
+  metric        String?  @db.VarChar(32)
+  aggregation   String?  @db.VarChar(32)
+  scope         String?  @db.VarChar(16)
+  fromValue     Decimal  @db.Decimal(10, 3)
+  toValue       Decimal  @db.Decimal(10, 3)
   interventions Json
   createdAt     DateTime @default(now()) @db.Timestamptz(6)
   updatedAt     DateTime @updatedAt      @db.Timestamptz(6)
@@ -810,6 +813,7 @@ model InterventionRule {
 
   @@index([domain, skillId])
   @@index([domain, categoryId, level])
+  @@index([domain, metric])
   @@map("InterventionRules")
 }
 
@@ -834,8 +838,8 @@ model UserInformation {
   minJWTGeneratedAt                        DateTime              @default(now()) @db.Timestamptz(6)
   injectionMode                            Int                   @default(2)
   injectCondition                          Int                   @default(1)
-  defaultContrastOnlyProtocol              Int                   @default(2)
-  defaultContrastAndSalineProtocol         Int                   @default(1)
+  defaultContrastOnlyProtocol              Int                   @default(1)
+  defaultContrastAndSalineProtocol         Int                   @default(3)
   sliceExpansionBehavior                   Int                   @default(1)
   preferredAnswerCriteriaByStackQuestionId Json?
   preferredTimingMethod                    String?               @db.VarChar(20)

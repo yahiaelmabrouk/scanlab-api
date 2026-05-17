@@ -162,7 +162,7 @@ const SkillsScoresCTUtil = {
         sliceQuantScore.slicePrescriptionScore.coverageY * 0.1 +
         sliceQuantScore.slicePrescriptionScore.dimensionX * 0.2 +
         sliceQuantScore.slicePrescriptionScore.dimensionY * 0.2 +
-        sliceQuantScore.slicePrescriptionScore.thickness * 0.4,
+        sliceQuantScore.slicePrescriptionScore.thickness * 0.3,
     }
     return output
   },

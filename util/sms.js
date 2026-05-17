@@ -5,6 +5,10 @@ const client =
     ? require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
     : null
 
+if (!client) {
+  logger.warn('[sms] Twilio not configured (TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN missing) — SMS sends will be logged to stdout only')
+}
+
 async function sendSms(to, body) {
   if (client) {
     const message = await client.messages.create({

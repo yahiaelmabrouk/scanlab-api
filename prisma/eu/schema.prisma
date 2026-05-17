@@ -146,8 +146,8 @@ model UserInformation {
   minJWTGeneratedAt                        DateTime @default(now()) @db.Timestamptz(6)
   injectionMode                            Int      @default(2)
   injectCondition                          Int      @default(1)
-  defaultContrastOnlyProtocol              Int      @default(2)
-  defaultContrastAndSalineProtocol         Int      @default(1)
+  defaultContrastOnlyProtocol              Int      @default(1)
+  defaultContrastAndSalineProtocol         Int      @default(3)
   sliceExpansionBehavior                   Int      @default(1)
   preferredAnswerCriteriaByStackQuestionId Json?
   preferredTimingMethod                    String?               @db.VarChar(20)
@@ -207,7 +207,7 @@ model UserPhone {
   id          Int       @id @default(autoincrement())
   userId      Int       @unique
   phoneNumber String    @db.VarChar(20)
-  verified    Boolean   @default(true)
+  verified    Boolean   @default(false)
   verifiedAt  DateTime? @db.Timestamptz(6)
   countryCode String    @db.VarChar(5)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)

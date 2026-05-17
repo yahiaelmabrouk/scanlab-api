@@ -100,19 +100,6 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.STRING(20),
         allowNull: true,
       },
-      emailVerified: {
-        type: DataTypes.BOOLEAN,
-        allowNull: false,
-        defaultValue: false,
-      },
-      emailVerifyToken: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      emailVerifyTokenExpiresAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-      },
     },
     {}
   )

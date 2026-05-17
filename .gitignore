@@ -24,4 +24,3 @@ yarn-error.log*
 
 # Test output files
 jest_*.txt
-backend/
