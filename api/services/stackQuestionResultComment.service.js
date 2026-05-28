@@ -96,8 +96,8 @@ const createComment = async (loggedInUserId, testRunUserId, data) => {
     }
   })
 
-  // Fire-and-forget: notify the student that feedback was left on their result.
-  // Resolve the test run id for a precise deep link (best-effort).
+  // Fire-and-forget notifications. Resolve the test run id for a precise deep
+  // link (best-effort).
   setImmediate(async () => {
     let testRunId = null
     try {
@@ -108,9 +108,27 @@ const createComment = async (loggedInUserId, testRunUserId, data) => {
         testRunId = qsr ? qsr.testRunId : null
       }
     } catch (err) {
-      // Deep link is best-effort; notifyFeedbackReceived falls back to the test-runs list.
+      // Deep link is best-effort; the notification falls back to the test-runs list.
     }
-    notificationEvents.notifyFeedbackReceived(testRunUserId, loggedInUserId, testRunId)
+
+    // Direction matters: when the test-run owner (student) comments, it's a reply to
+    // feedback → notify the instructor(s) who left feedback. Otherwise an instructor
+    // is leaving feedback → notify the student.
+    const isStudentReply = parseInt(loggedInUserId, 10) === parseInt(testRunUserId, 10)
+    if (isStudentReply) {
+      try {
+        const priorComments = await modelProvider.StackQuestionResultComment.findAll({
+          where: { stackQuestionResultId, commentedUserId: { [Op.ne]: loggedInUserId } },
+          attributes: ['commentedUserId'],
+        })
+        const feedbackAuthorIds = priorComments.map((c) => c.commentedUserId)
+        notificationEvents.notifyFeedbackReplied(testRunUserId, feedbackAuthorIds, testRunId)
+      } catch (err) {
+        console.log('notifyFeedbackReplied resolution failed in createComment', err)
+      }
+    } else {
+      notificationEvents.notifyFeedbackReceived(testRunUserId, loggedInUserId, testRunId)
+    }
   })
 
   return stackQuestionResultComment

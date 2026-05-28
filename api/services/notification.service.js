@@ -41,7 +41,7 @@ async function dispatchInApp(prismaClient, userId, eventType, context) {
 }
 
 async function dispatchEmail(prismaClient, userId, eventType, context) {
-  const { title, message, deepLink, emailSubject, emailHtml, emailText } = context
+  const { title, message, emailSubject, emailHtml, emailText } = context
 
   const user = await prismaClient.user.findUnique({
     where: { id: userId },
@@ -54,17 +54,16 @@ async function dispatchEmail(prismaClient, userId, eventType, context) {
     return
   }
 
-  const linkHtml = deepLink ? `<p><a href="${deepLink}">View in ScanLab</a></p>` : ''
   await sendMail({
     to: user.email,
     subject: emailSubject || title || eventType,
-    html: emailHtml || `<p>${message || ''}</p>${linkHtml}`,
+    html: emailHtml || `<p>${message || ''}</p>`,
     text: emailText || message || '',
   })
 }
 
 async function dispatchSms(prismaClient, userId, eventType, context) {
-  const { title, message, deepLink } = context
+  const { title, message } = context
   const phone = await prismaClient.userPhone.findUnique({
     where: { userId },
     select: { phoneNumber: true, verified: true },
@@ -74,7 +73,6 @@ async function dispatchSms(prismaClient, userId, eventType, context) {
   const parts = []
   if (title) parts.push(title)
   if (message) parts.push(message)
-  if (deepLink) parts.push(deepLink)
   await sendSms(phone.phoneNumber, parts.join(': '))
 }
 
@@ -205,6 +203,44 @@ async function setPhoneDirect(userId, phoneNumber, countryCode) {
   })
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// App settings (global key/value config)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Key for the "notify students N days before their account expires" threshold.
+const ACCOUNT_EXPIRY_NOTICE_DAYS_KEY = 'account_expiry_notice_days'
+const DEFAULT_ACCOUNT_EXPIRY_NOTICE_DAYS = 7
+
+async function getSetting(key) {
+  const row = await prisma.appSetting.findUnique({ where: { key } })
+  return row ? row.value : null
+}
+
+async function setSetting(key, value) {
+  return prisma.appSetting.upsert({
+    where: { key },
+    create: { key, value: String(value) },
+    update: { value: String(value) },
+  })
+}
+
+/** Returns the configured account-expiry notice threshold in whole days. */
+async function getAccountExpiryNoticeDays() {
+  try {
+    const raw = await getSetting(ACCOUNT_EXPIRY_NOTICE_DAYS_KEY)
+    const days = parseInt(raw, 10)
+    return Number.isInteger(days) && days > 0 ? days : DEFAULT_ACCOUNT_EXPIRY_NOTICE_DAYS
+  } catch (err) {
+    logger.error(`[notification] getAccountExpiryNoticeDays failed: ${err.message}`)
+    return DEFAULT_ACCOUNT_EXPIRY_NOTICE_DAYS
+  }
+}
+
+/** Persists the account-expiry notice threshold (whole days). */
+async function setAccountExpiryNoticeDays(days) {
+  return setSetting(ACCOUNT_EXPIRY_NOTICE_DAYS_KEY, parseInt(days, 10))
+}
+
 module.exports = {
   notifyUser,
   getNotifications,
@@ -215,4 +251,7 @@ module.exports = {
   upsertPreferences,
   getPhoneStatus,
   setPhoneDirect,
+  getAccountExpiryNoticeDays,
+  setAccountExpiryNoticeDays,
+  DEFAULT_ACCOUNT_EXPIRY_NOTICE_DAYS,
 }

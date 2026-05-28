@@ -1,4 +1,6 @@
-const { Cohort, CohortStudent, sequelize } = require('../../db/models')
+const { Cohort, CohortStudent, BodyPart, Region, sequelize } = require('../../db/models')
+const notificationEvents = require('./notificationEvents')
+const logger = require('../../util/logger')
 
 /**
  * Applies delta operations (add/remove) to body part settings arrays.
@@ -52,6 +54,85 @@ function extractBodyPartSettings(settings) {
 }
 
 /**
+ * Set difference helper: returns ids present in `before` but not `after`, and vice versa.
+ */
+function diffIds(before = [], after = []) {
+  const b = new Set(before)
+  const a = new Set(after)
+  return {
+    added: [...a].filter((id) => !b.has(id)),
+    removed: [...b].filter((id) => !a.has(id)),
+  }
+}
+
+async function resolveBodyPartNames(ids) {
+  if (!ids || ids.length === 0) return []
+  const rows = await BodyPart.findAll({ where: { id: ids }, attributes: ['id', 'name'] })
+  return rows.map((r) => r.name).filter(Boolean)
+}
+
+async function resolveRegionNames(ids) {
+  if (!ids || ids.length === 0) return []
+  const rows = await Region.findAll({ where: { id: ids }, attributes: ['id', 'name'] })
+  return rows.map((r) => r.name).filter(Boolean)
+}
+
+/**
+ * Compares before/after body part settings and dispatches the relevant student
+ * notifications. Fire-and-forget: never throws, never blocks the caller.
+ *
+ * Edge cases handled:
+ *  - Unlocking a region emits both lockedRegions.remove and lockedBodyParts.remove;
+ *    we report region + body-part names together as one "unlocked" event.
+ *  - Locking an item also strips it from sandbox (sandboxedBodyParts.remove). That
+ *    sandbox-off is a side effect of locking, not a deliberate "removed from sandbox"
+ *    action, so we suppress it for any body part that became locked in the same change.
+ *
+ * @param {number[]} userIds - recipients (all cohort students, or the single student)
+ * @param {Object} before    - body part settings before the change
+ * @param {Object} after     - body part settings after the change
+ */
+async function dispatchSettingChangeNotifications(userIds, before, after) {
+  try {
+    const ids = (userIds || []).filter((id) => Number.isInteger(id))
+    if (ids.length === 0) return
+
+    const lockedBp = diffIds(before.lockedBodyParts, after.lockedBodyParts)
+    const lockedRg = diffIds(before.lockedRegions, after.lockedRegions)
+    const sandbox = diffIds(before.sandboxedBodyParts, after.sandboxedBodyParts)
+
+    const newlyLocked = new Set(lockedBp.added)
+    // Sandbox removals that are merely a consequence of locking are not real "removed
+    // from sandbox" events.
+    const sandboxDisabledIds = sandbox.removed.filter((id) => !newlyLocked.has(id))
+
+    const [unlockedBpNames, unlockedRgNames, sandboxOnNames, sandboxOffNames] = await Promise.all([
+      resolveBodyPartNames(lockedBp.removed),
+      resolveRegionNames(lockedRg.removed),
+      resolveBodyPartNames(sandbox.added),
+      resolveBodyPartNames(sandboxDisabledIds),
+    ])
+
+    const unlockedNames = [...unlockedRgNames, ...unlockedBpNames]
+    if (unlockedNames.length > 0) notificationEvents.notifyExamUnlocked(ids, unlockedNames)
+    if (sandboxOnNames.length > 0) notificationEvents.notifyExamSandboxEnabled(ids, sandboxOnNames)
+    if (sandboxOffNames.length > 0) notificationEvents.notifyExamSandboxDisabled(ids, sandboxOffNames)
+  } catch (err) {
+    logger.error(`[bodyPartSettings] dispatchSettingChangeNotifications failed: ${err.message}`)
+  }
+}
+
+async function getCohortStudentUserIds(cohortId) {
+  try {
+    const students = await CohortStudent.findAll({ where: { cohortId }, attributes: ['userId'] })
+    return students.map((s) => s.userId).filter((id) => Number.isInteger(id))
+  } catch (err) {
+    logger.error(`[bodyPartSettings] getCohortStudentUserIds failed (cohort ${cohortId}): ${err.message}`)
+    return []
+  }
+}
+
+/**
  * Atomically updates cohort body part settings using row locking.
  *
  * @param {number} cohortId - The cohort ID
@@ -61,7 +142,10 @@ function extractBodyPartSettings(settings) {
  * @throws {Error} - If cohort not found
  */
 async function updateCohortBodyPartSettings(cohortId, target, deltaOperations) {
-  return sequelize.transaction(async (transaction) => {
+  let beforeSettings
+  let afterSettings
+
+  const result = await sequelize.transaction(async (transaction) => {
     // Acquire row lock using FOR UPDATE
     const cohort = await Cohort.findByPk(cohortId, {
       transaction,
@@ -73,6 +157,7 @@ async function updateCohortBodyPartSettings(cohortId, target, deltaOperations) {
     }
 
     const currentSettings = cohort[target] || {}
+    beforeSettings = extractBodyPartSettings(currentSettings)
     const updatedSettings = applyDeltaOperations(currentSettings, deltaOperations)
 
     // Update the settings field
@@ -81,8 +166,19 @@ async function updateCohortBodyPartSettings(cohortId, target, deltaOperations) {
     cohort.changed(target, true)
     await cohort.save({ transaction })
 
-    return extractBodyPartSettings(updatedSettings)
+    afterSettings = extractBodyPartSettings(updatedSettings)
+    return afterSettings
   })
+
+  // Fire-and-forget student notifications after the change is committed. Only the
+  // manager-facing cohort settings reach students; adminSettings is a separate
+  // admin-global control and is not surfaced as a student notification.
+  if (target === 'settings') {
+    const userIds = await getCohortStudentUserIds(cohortId)
+    dispatchSettingChangeNotifications(userIds, beforeSettings, afterSettings)
+  }
+
+  return result
 }
 
 /**
@@ -94,7 +190,11 @@ async function updateCohortBodyPartSettings(cohortId, target, deltaOperations) {
  * @throws {Error} - If cohort student not found
  */
 async function updateCohortStudentBodyPartSettings(cohortStudentId, deltaOperations) {
-  return sequelize.transaction(async (transaction) => {
+  let beforeSettings
+  let afterSettings
+  let studentUserId
+
+  const result = await sequelize.transaction(async (transaction) => {
     // Acquire row lock using FOR UPDATE
     const student = await CohortStudent.findByPk(cohortStudentId, {
       transaction,
@@ -106,6 +206,8 @@ async function updateCohortStudentBodyPartSettings(cohortStudentId, deltaOperati
     }
 
     const currentSettings = student.settingsFromManager || {}
+    beforeSettings = extractBodyPartSettings(currentSettings)
+    studentUserId = student.userId
     const updatedSettings = applyDeltaOperations(currentSettings, deltaOperations)
 
     // Update the settings field
@@ -114,11 +216,17 @@ async function updateCohortStudentBodyPartSettings(cohortStudentId, deltaOperati
     student.changed('settingsFromManager', true)
     await student.save({ transaction })
 
+    afterSettings = extractBodyPartSettings(updatedSettings)
     return {
-      ...extractBodyPartSettings(updatedSettings),
+      ...afterSettings,
       cohortId: student.cohortId,
     }
   })
+
+  // Fire-and-forget: a per-student override only affects this one student.
+  dispatchSettingChangeNotifications([studentUserId], beforeSettings, afterSettings)
+
+  return result
 }
 
 module.exports = {

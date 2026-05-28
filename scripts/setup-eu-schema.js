@@ -185,7 +185,7 @@ async function run() {
     await client.query(`
       DO $$ BEGIN
         IF NOT EXISTS (SELECT 1 FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace WHERE t.typname = 'enum_NotificationType' AND n.nspname = 'eu_west_server_public') THEN
-          CREATE TYPE "enum_NotificationType" AS ENUM ('EXAM_ASSIGNED', 'FEEDBACK_RECEIVED', 'ACCOUNT_CREATED', 'COHORT_ACCOUNT_OPENED');
+          CREATE TYPE "enum_NotificationType" AS ENUM ('EXAM_ASSIGNED', 'FEEDBACK_RECEIVED', 'ACCOUNT_CREATED', 'COHORT_ACCOUNT_OPENED', 'EXAM_UNLOCKED', 'EXAM_SANDBOX_ENABLED', 'EXAM_SANDBOX_DISABLED', 'FEEDBACK_REPLIED', 'STUDENT_EXAM_COMPLETED', 'NEW_FEATURE', 'KNOWN_BUG', 'ACCOUNT_EXPIRING');
         END IF;
       END $$
     `)
