@@ -307,11 +307,15 @@ app.use(function (err, req, res, next) {
     returnObj.error = err
   } else {
     res.status(500)
+    // Always log the real error (incl. production) so it shows up in pm2 logs,
+    // not only in Sentry. Without this, 500s are invisible on the server.
+    logger.error(
+      `[errorMiddleware] ${req.method} ${req.originalUrl} failed: ${err && err.message}`,
+      { json: { stack: err && err.stack } }
+    )
     if (isProduction()) {
-      // errors in production will get sent to sentry, no need to log it
       returnObj.sentry = res.sentry
     } else {
-      console.error(err)
       returnObj.error = err.toString()
     }
   }
