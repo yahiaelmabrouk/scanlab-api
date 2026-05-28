@@ -4,6 +4,7 @@ const { fetchLoggedInUser, requireAdmin } = require('../api_util/api_util')
 const { v, Joi } = require('../api_util/validator')
 const svc = require('../services/notification.service')
 const notificationEvents = require('../services/notificationEvents')
+const logger = require('../../util/logger')
 
 // All notification event types. Keep in sync with the NotificationType enum.
 const NOTIFICATION_EVENT_TYPES = [
@@ -144,9 +145,14 @@ router.post(
   requireAdmin,
   v(newFeatureSchema),
   async function (req, res) {
-    const featureName = req.body.featureName.trim()
-    notificationEvents.notifyNewFeature(featureName)
-    res.json({ success: true })
+    try {
+      const featureName = req.body.featureName.trim()
+      await notificationEvents.notifyNewFeature(featureName)
+      res.json({ success: true })
+    } catch (err) {
+      logger.error(`[announcement] new-feature failed: ${err.message}`)
+      res.status(500).json({ success: false, error: err.message })
+    }
   }
 )
 
@@ -159,9 +165,14 @@ const knownBugSchema = {
 // POST /announcements/known-bug — admin broadcasts a "known issue" notification
 // to every enrolled student. Fire-and-forget fan-out; responds immediately.
 router.post('/announcements/known-bug', fetchLoggedInUser, requireAdmin, v(knownBugSchema), async function (req, res) {
-  const bugDescription = req.body.bugDescription.trim()
-  notificationEvents.notifyKnownBug(bugDescription)
-  res.json({ success: true })
+  try {
+    const bugDescription = req.body.bugDescription.trim()
+    await notificationEvents.notifyKnownBug(bugDescription)
+    res.json({ success: true })
+  } catch (err) {
+    logger.error(`[announcement] known-bug failed: ${err.message}`)
+    res.status(500).json({ success: false, error: err.message })
+  }
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
