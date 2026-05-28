@@ -145,14 +145,12 @@ router.post(
   requireAdmin,
   v(newFeatureSchema),
   async function (req, res) {
-    try {
-      const featureName = req.body.featureName.trim()
-      await notificationEvents.notifyNewFeature(featureName)
-      res.json({ success: true })
-    } catch (err) {
-      logger.error(`[announcement] new-feature failed: ${err.message}`)
-      res.status(500).json({ success: false, error: err.message })
-    }
+    const featureName = req.body.featureName.trim()
+    // Fire-and-forget per notificationEvents.js contract — must NOT await.
+    // The fan-out includes email/SMS which can block on slow/unreachable
+    // upstreams; awaiting it would hang the request and the proxy returns 500.
+    notificationEvents.notifyNewFeature(featureName)
+    res.json({ success: true })
   }
 )
 
@@ -165,14 +163,10 @@ const knownBugSchema = {
 // POST /announcements/known-bug — admin broadcasts a "known issue" notification
 // to every enrolled student. Fire-and-forget fan-out; responds immediately.
 router.post('/announcements/known-bug', fetchLoggedInUser, requireAdmin, v(knownBugSchema), async function (req, res) {
-  try {
-    const bugDescription = req.body.bugDescription.trim()
-    await notificationEvents.notifyKnownBug(bugDescription)
-    res.json({ success: true })
-  } catch (err) {
-    logger.error(`[announcement] known-bug failed: ${err.message}`)
-    res.status(500).json({ success: false, error: err.message })
-  }
+  const bugDescription = req.body.bugDescription.trim()
+  // Fire-and-forget per notificationEvents.js contract — must NOT await.
+  notificationEvents.notifyKnownBug(bugDescription)
+  res.json({ success: true })
 })
 
 // ─────────────────────────────────────────────────────────────────────────────

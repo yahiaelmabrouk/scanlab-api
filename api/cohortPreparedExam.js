@@ -19,9 +19,11 @@ router.get('/cohort-prepared-exams/:id', fetchLoggedInUser, async function (req,
 
 router.post('/cohort-prepared-exams', fetchLoggedInUser, async function (req, res) {
   try {
-    const { ids, cohortId } = req.body
+    const { ids } = req.body
+    // Frontend may send cohortId as a string (route param) — Sequelize coerces it.
+    const cohortId = parseInt(req.body.cohortId, 10)
     if (!Array.isArray(ids) || !Number.isInteger(cohortId)) {
-      return res.status(400).json({ success: false, error: 'cohortId (integer) and ids (array) are required' })
+      return res.status(400).json({ success: false, error: 'cohortId and ids are required' })
     }
     const preparedExams = await CohortPreparedExam.findAll({
       where: {
