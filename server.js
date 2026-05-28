@@ -16,6 +16,7 @@ const { mountS3Cache } = require('./api/api_util/s3Cacher')
 const { precalcAllCohorts, processCohortInChunks, precalcAllLargeCohortUserStats } = require('./api/precalc')
 const { withLock } = require('./util/backgroundLock')
 const { stopRefreshTimer, flushLastUsedNow } = require('./api/cacheHelper')
+const { runAccountExpiryScan } = require('./api/services/notificationEvents')
 
 const healthRoutes = require('./health/healthRoutes')
 const { inFlightMiddleware, registerGraceful } = require('./util/graceful')
@@ -27,6 +28,7 @@ const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
 let periodicStartTimer = null // initial 1-hour delay timeout
 let periodicTimer = null // repeating 2-hour interval (set after first run)
 let weeklyTimer = null
+let dailyTimer = null
 
 // Only web.1 runs background jobs to avoid redundant DB work across dynos.
 // Defaults to 'web.1' so jobs still run in local development (where DYNO is undefined).
@@ -114,6 +116,38 @@ function scheduleWeeklyAt(dayOfWeek, timeHHmm, task) {
   }
 
   // kick off initial schedule
+  planNext()
+}
+
+// ---- daily scheduler (runs task every day at given time, server's local TZ) ----
+function scheduleDailyAt(timeHHmm, task) {
+  const [H, M] = (timeHHmm || '08:00').split(':').map(Number)
+
+  async function runAndReschedule() {
+    try {
+      logger.info(`[Scheduler] Running daily task @ ${new Date().toISOString()}`)
+      await task()
+      logger.info('[Scheduler] Daily task finished')
+    } catch (e) {
+      logger.error('[Scheduler] Daily task failed', e)
+    } finally {
+      planNext()
+    }
+  }
+
+  function planNext() {
+    const now = new Date()
+    const next = new Date(now)
+    next.setHours(H, M, 0, 0)
+    // if today's time already passed, run tomorrow
+    if (next <= now) {
+      next.setDate(next.getDate() + 1)
+    }
+    const delay = next - now
+    logger.info(`[Scheduler] Next daily run scheduled at ${next.toISOString()} (in ${(delay / 60000).toFixed(1)} min)`)
+    dailyTimer = setTimeout(runAndReschedule, delay)
+  }
+
   planNext()
 }
 
@@ -325,6 +359,10 @@ async function connectAndStart() {
       // -------- Weekly cache warm (once per week) --------
       // 0 = Sunday. Time is in UTC (server local time).
       scheduleWeeklyAt(0, '09:00', withLock('precalcAllLargeCohortUserStats', () => precalcAllLargeCohortUserStats(false)))
+
+      // -------- Daily account-expiry reminder scan --------
+      // Notifies students whose account expires in exactly N days (admin-configured).
+      scheduleDailyAt('08:00', withLock('accountExpiryScan', runAccountExpiryScan))
     }
 
     // mark ready after a short warmup so /readyz turns green only when the app is actually usable
@@ -341,6 +379,7 @@ async function connectAndStart() {
       stopCallbacks: [
         () => { clearTimeout(periodicStartTimer); clearInterval(periodicTimer) },
         () => { clearTimeout(weeklyTimer) },
+        () => { clearTimeout(dailyTimer) },
         stopRefreshTimer,
         () => flushLastUsedNow().catch(() => {}),
       ],

@@ -5,6 +5,7 @@ const testSvc = require('../services/testRun.service')
 const { NoQuestionSetAvailableError } = testSvc
 const cohortsSvc = require('../services/cohorts.service')
 const patientPhysioSvc = require('../services/patientPhysio.service')
+const notificationEvents = require('../services/notificationEvents')
 const { PreparedExam } = require('../../db/models')
 const { CLIENT_PRODUCTION_HOSTNAMES } = require('../../util/constants')
 const statsCacheHelper = require('../statsCacheHelper')
@@ -156,6 +157,10 @@ router.post(paths.testSubmit, fetchLoggedInUser, async function (req, res) {
       console.log('flagCachesDirtyAfterSubmission failed', err)
     }
   })
+
+  // Fire-and-forget: if this submission was a prepared exam, notify the student's
+  // cohort manager(s). No-ops for regular/sandbox runs (no preparedExamId).
+  notificationEvents.notifyPreparedExamCompleted(req.session.user.id, req.params.id)
 })
 
 // Regrade Test

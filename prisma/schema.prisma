@@ -997,6 +997,14 @@ enum NotificationType {
   FEEDBACK_RECEIVED
   ACCOUNT_CREATED
   COHORT_ACCOUNT_OPENED
+  EXAM_UNLOCKED
+  EXAM_SANDBOX_ENABLED
+  EXAM_SANDBOX_DISABLED
+  FEEDBACK_REPLIED
+  STUDENT_EXAM_COMPLETED
+  NEW_FEATURE
+  KNOWN_BUG
+  ACCOUNT_EXPIRING
 
   @@map("enum_NotificationType")
 }
@@ -1037,6 +1045,16 @@ model NotificationPreference {
 
   @@unique([userId, channel, eventType])
   @@map("NotificationPreferences")
+}
+
+// Global key/value application settings (e.g. account-expiry notice threshold).
+// Lives only in the primary DB, like other global config tables.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@map("AppSettings")
 }
 
 model UserPhone {

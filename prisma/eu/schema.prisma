@@ -163,6 +163,14 @@ enum NotificationType {
   FEEDBACK_RECEIVED
   ACCOUNT_CREATED
   COHORT_ACCOUNT_OPENED
+  EXAM_UNLOCKED
+  EXAM_SANDBOX_ENABLED
+  EXAM_SANDBOX_DISABLED
+  FEEDBACK_REPLIED
+  STUDENT_EXAM_COMPLETED
+  NEW_FEATURE
+  KNOWN_BUG
+  ACCOUNT_EXPIRING
 
   @@map("enum_NotificationType")
 }
@@ -207,9 +215,11 @@ model UserPhone {
   id          Int       @id @default(autoincrement())
   userId      Int       @unique
   phoneNumber String    @db.VarChar(20)
-  verified    Boolean   @default(false)
+  verified    Boolean   @default(true)
   verifiedAt  DateTime? @db.Timestamptz(6)
   countryCode String    @db.VarChar(5)
+  otpCode      String?   @db.VarChar(6)
+  otpExpiresAt DateTime? @db.Timestamptz(6)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
 
