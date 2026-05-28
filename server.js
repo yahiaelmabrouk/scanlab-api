@@ -227,6 +227,7 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }))
 const whitelist = [
   '127.0.0.1',
   'localhost',
+  '24.199.106.243',
   'scanlabmr.com',
   'www.scanlabmr.com',
   'app.scanlabmr.com',
