@@ -2,6 +2,7 @@ const express = require('express')
 
 const { fetchLoggedInUser } = require('./api_util/api_util')
 const notificationEvents = require('./services/notificationEvents')
+const logger = require('../util/logger')
 
 const { CohortPreparedExam } = require('../db/models')
 
@@ -17,38 +18,46 @@ router.get('/cohort-prepared-exams/:id', fetchLoggedInUser, async function (req,
 })
 
 router.post('/cohort-prepared-exams', fetchLoggedInUser, async function (req, res) {
-  const { ids, cohortId } = req.body
-  const preparedExams = await CohortPreparedExam.findAll({
-    where: {
-      cohortId,
-    },
-  })
-
-  const createdExams = []
-
-  for (let preparedExamId of ids) {
-    const previouslyCreatedCohortPreparedExamsDoNotIncludeThisExamId = !preparedExams.some(
-      (e) => e.examId === preparedExamId
-    )
-    if (previouslyCreatedCohortPreparedExamsDoNotIncludeThisExamId) {
-      const e = await CohortPreparedExam.create({ cohortId, examId: preparedExamId })
-      createdExams.push(e)
+  try {
+    const { ids, cohortId } = req.body
+    if (!Array.isArray(ids) || !Number.isInteger(cohortId)) {
+      return res.status(400).json({ success: false, error: 'cohortId (integer) and ids (array) are required' })
     }
-  }
+    const preparedExams = await CohortPreparedExam.findAll({
+      where: {
+        cohortId,
+      },
+    })
 
-  for (let exam of preparedExams) {
-    if (!ids.includes(exam.examId)) await exam.destroy()
-  }
+    const createdExams = []
 
-  // Fire-and-forget: notify cohort students of newly assigned exams.
-  if (createdExams.length > 0) {
-    notificationEvents.notifyExamAssigned(
-      cohortId,
-      createdExams.map((e) => e.examId)
-    )
-  }
+    for (let preparedExamId of ids) {
+      const previouslyCreatedCohortPreparedExamsDoNotIncludeThisExamId = !preparedExams.some(
+        (e) => e.examId === preparedExamId
+      )
+      if (previouslyCreatedCohortPreparedExamsDoNotIncludeThisExamId) {
+        const e = await CohortPreparedExam.create({ cohortId, examId: preparedExamId })
+        createdExams.push(e)
+      }
+    }
 
-  res.json({ success: true, preparedExams: createdExams })
+    for (let exam of preparedExams) {
+      if (!ids.includes(exam.examId)) await exam.destroy()
+    }
+
+    // Fire-and-forget: notify cohort students of newly assigned exams.
+    if (createdExams.length > 0) {
+      notificationEvents.notifyExamAssigned(
+        cohortId,
+        createdExams.map((e) => e.examId)
+      )
+    }
+
+    res.json({ success: true, preparedExams: createdExams })
+  } catch (err) {
+    logger.error(`[cohort-prepared-exams] POST failed: ${err.message}`)
+    res.status(500).json({ success: false, error: err.message })
+  }
 })
 
 module.exports = router
